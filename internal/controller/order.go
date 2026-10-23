@@ -379,7 +379,7 @@ func (o *OrderController) AuthorizedOrderPayment(ctx context.Context, token, num
 	if order == nil || order.OrderNumber != number || len(items) == 0 || len(payments) == 0 {
 		return nil, orderFailure("ORDB02002", "Pesanan tidak ditemukan.", 404)
 	}
-	return map[string]any{"order": order, "item": items[0], "payment": payments[0]}, nil
+	return map[string]any{"order": *order, "item": items[0], "payment": payments[0]}, nil
 }
 func (o *OrderController) PaymentStatus(ctx context.Context, paymentID bson.ObjectID, number, whatsapp string) (map[string]any, error) {
 	p, order, err := o.repository.FindPaymentOrder(ctx, paymentID)

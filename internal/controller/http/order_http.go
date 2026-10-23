@@ -269,9 +269,22 @@ func (h *OrderHTTP) trackingPayment(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, failure.Status, failure.Code, failure.Message, nil)
 		return
 	}
-	payment := scope["payment"].(model.OrderPayment)
-	order := scope["order"].(model.Order)
-	item := scope["item"].(model.OrderItem)
+	payment, ok := scope["payment"].(model.OrderPayment)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, "ORDT03001", "Detail pembayaran sedang tidak tersedia.", nil)
+		return
+	}
+	orderValue, ok := scope["order"].(model.Order)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, "ORDT03001", "Detail pembayaran sedang tidak tersedia.", nil)
+		return
+	}
+	order := &orderValue
+	item, ok := scope["item"].(model.OrderItem)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, "ORDT03001", "Detail pembayaran sedang tidak tersedia.", nil)
+		return
+	}
 	instructions, e := h.orders.PaymentInstructions(payment.Method)
 	if e != nil {
 		failure := controller.ToOrderError(e)
@@ -299,7 +312,11 @@ func (h *OrderHTTP) trackingReportPayment(w http.ResponseWriter, r *http.Request
 		writeJSON(w, failure.Status, failure.Code, failure.Message, nil)
 		return
 	}
-	order := scope["order"].(model.Order)
+	order, ok := scope["order"].(model.Order)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, "ORDT03001", "Konfirmasi pembayaran tidak dapat diproses.", nil)
+		return
+	}
 	payment := scope["payment"].(model.OrderPayment)
 	data, e := h.orders.ReportPayment(r.Context(), payment.ID, number, order.CustomerWhatsApp, featureEnabled("FEATURE_SPRINT_2"))
 	if e != nil {

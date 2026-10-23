@@ -354,7 +354,7 @@ func authTokens(r *http.Request, cookieName string) []string {
 func (h *AuthHTTP) logout(accountType model.AccountType) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
-		if origin := r.Header.Get("Origin"); origin != "" && origin != requestOrigin(r) {
+		if origin := r.Header.Get("Origin"); !isTrustedRequestOrigin(origin, requestOrigin(r), parseCORSOrigins(os.Getenv("CORS_ALLOWED_ORIGINS"))) {
 			code, message := "AUTB02001", "Permintaan logout tidak valid."
 			if accountType == model.AdminAccountType {
 				code, message = "ADMB02001", "Permintaan logout tidak valid."

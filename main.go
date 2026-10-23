@@ -66,7 +66,8 @@ func main() {
 
 	addr := ":" + port
 	slog.Info("starting HTTP server", "address", addr)
-	if err := http.ListenAndServe(addr, controllers.WithRequestLogging(mux)); err != nil {
+	handler := controllers.WithCORS(controllers.WithRequestLogging(mux))
+	if err := http.ListenAndServe(addr, handler); err != nil {
 		slog.Error("HTTP server stopped", "error", err)
 		os.Exit(1)
 	}
