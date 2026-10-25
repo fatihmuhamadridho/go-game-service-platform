@@ -1,0 +1,22 @@
+$kind: http-example
+name: Missing admin-account.read grant
+order: 3000
+request:
+  method: GET
+  url: http://localhost:8080/api/admin/admin-users/v1/list?page=1&limit=20
+response:
+  statusCode: 403
+  statusText: Forbidden
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {
+        "code": "USRB01002",
+        "message": "Akses admin tidak diizinkan.",
+        "data": null
+      }

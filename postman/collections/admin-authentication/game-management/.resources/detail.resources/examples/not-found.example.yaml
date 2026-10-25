@@ -1,0 +1,18 @@
+$kind: http-example
+name: Game not found
+order: 2000
+request:
+  method: GET
+  url: http://localhost:8080/api/admin/games/v1/detail/game_01ARZ3NDEKTSV4RRFFQ69G5FAV
+response:
+  statusCode: 404
+  statusText: Not Found
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {"code":"GAMB02004","message":"Game not found.","data":null}

@@ -1,0 +1,22 @@
+$kind: http-example
+name: Admin account not found
+order: 3000
+request:
+  method: GET
+  url: http://localhost:8080/api/admin/admin-users/v1/detail/admin_01JXYZ
+response:
+  statusCode: 404
+  statusText: Not Found
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {
+        "code": "USRB02004",
+        "message": "Akun admin tidak ditemukan.",
+        "data": null
+      }

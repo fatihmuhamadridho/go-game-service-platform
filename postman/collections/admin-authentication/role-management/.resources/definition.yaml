@@ -1,0 +1,4 @@
+$kind: collection
+name: Role Management
+description: Role and permission management. Run Login first; this folder shares auth cookies and csrfToken.
+order: 3000

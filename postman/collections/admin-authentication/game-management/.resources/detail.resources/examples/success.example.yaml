@@ -1,0 +1,34 @@
+$kind: http-example
+name: Game detail
+order: 1000
+request:
+  method: GET
+  url: http://localhost:8080/api/admin/games/v1/detail/game_01ARZ3NDEKTSV4RRFFQ69G5FAV
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {
+        "code": "GAMS00000",
+        "message": "Game detail retrieved",
+        "data": {
+          "id": "game_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          "name": "Example Game",
+          "slug": "example-game",
+          "description": null,
+          "imageUrl": "https://cdn.example.test/example-game.webp",
+          "platform": "MOBILE",
+          "isActive": false,
+          "isPopular": false,
+          "sortOrder": 0,
+          "createdAt": "2026-10-25T00:00:00Z",
+          "updatedAt": "2026-10-25T00:00:00Z"
+        }
+      }

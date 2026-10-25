@@ -1,0 +1,32 @@
+$kind: http-example
+name: Role detail
+order: 1000
+request:
+  method: GET
+  url: http://localhost:8080/api/admin/roles/v1/detail/role_01JXYZ
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {
+        "code": "ROLS00000",
+        "message": "Role detail retrieved",
+        "data": {
+          "id": "role_01JXYZ",
+          "name": "Support Agent",
+          "code": "SUPPORT_AGENT",
+          "description": "Read-only support access",
+          "status": "ACTIVE",
+          "isSystem": false,
+          "permissions": ["role.read", "game.read"],
+          "createdAt": "2026-10-11T09:45:00Z",
+          "updatedAt": "2026-10-11T09:45:00Z"
+        }
+      }

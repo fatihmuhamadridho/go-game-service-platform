@@ -1,0 +1,23 @@
+$kind: http-example
+name: Admin account list has no matches
+order: 5000
+request:
+  method: GET
+  url: http://localhost:8080/api/admin/admin-users/v1/list?search=missing-account
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {
+        "code": "USRS00000",
+        "message": "Daftar admin berhasil diambil.",
+        "data": [],
+        "pagination": {"page": 1, "limit": 20, "total": 0, "totalPages": 0}
+      }

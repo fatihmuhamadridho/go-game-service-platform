@@ -1,0 +1,4 @@
+$kind: collection
+name: Public Game Catalog
+description: Public game list and popular-game catalog endpoints. No authentication required.
+order: 3000

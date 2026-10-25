@@ -1,0 +1,51 @@
+$kind: http-request
+name: List Admin Accounts
+order: 1000
+method: GET
+url: '{{baseUrl}}/api/admin/admin-users/v1/list?page=1&limit=20&search=&status=ACTIVE&roleId='
+headers:
+  - key: Origin
+    value: '{{dashboardOrigin}}'
+  - key: X-CSRF-Token
+    value: '{{csrfToken}}'
+queryParams:
+  - key: page
+    value: '1'
+  - key: limit
+    value: '20'
+  - key: search
+    value: ''
+    description: Optional case-insensitive search over username, name, and email.
+  - key: status
+    value: ACTIVE
+    description: Optional ACTIVE or INACTIVE filter.
+  - key: roleId
+    value: ''
+    description: Optional role_ identifier filter.
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('Admin account list matches the documented envelope', function () {
+        const body = pm.response.json();
+        if (pm.response.code === 200) {
+          pm.expect(body.code).to.eql('USRS00000');
+          pm.expect(body.data).to.be.an('array');
+          pm.expect(body.pagination).to.include.keys('page', 'limit', 'total', 'totalPages');
+          if (body.data.length > 0) pm.environment.set('adminId', body.data[0].id);
+          for (const account of body.data) {
+            pm.expect(account).to.include.keys('id', 'username', 'name', 'email', 'status', 'role', 'lastActive', 'updatedAt');
+            pm.expect(account).not.to.have.any.keys('passwordHash', 'credential', 'refreshToken', 'csrfToken', 'session');
+          }
+        } else {
+          const expected = {400: 'USRB02001', 401: 'USRB01001', 403: 'USRB01002', 429: 'USRB02007', 500: 'USRT03001'};
+          pm.expect(expected).to.have.property(String(pm.response.code));
+          pm.expect(body.code).to.eql(expected[pm.response.code]);
+          pm.expect(body.data).to.eql(null);
+          if (pm.response.code === 429) pm.expect(pm.response.headers.get('Retry-After')).to.be.a('string').and.not.empty;
+        }
+      });
+      pm.test('Admin account list is not cached', function () {
+        pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store');
+      });
+examples: './.resources/list.resources/examples/'

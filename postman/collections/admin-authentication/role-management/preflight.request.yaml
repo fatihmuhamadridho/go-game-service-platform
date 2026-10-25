@@ -1,0 +1,23 @@
+$kind: http-request
+name: Preflight Role Update
+order: 6000
+method: OPTIONS
+url: '{{baseUrl}}/api/admin/roles/v1/update/{{roleId}}'
+headers:
+  - key: Origin
+    value: '{{dashboardOrigin}}'
+  - key: Access-Control-Request-Method
+    value: PUT
+  - key: Access-Control-Request-Headers
+    value: content-type, x-csrf-token
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('Role update preflight is accepted', function () { pm.response.to.have.status(204); });
+      pm.test('Role preflight allows the requested method and headers', function () {
+        pm.expect(pm.response.headers.get('Access-Control-Allow-Origin')).to.eql(pm.environment.get('dashboardOrigin'));
+        pm.expect(pm.response.headers.get('Access-Control-Allow-Methods')).to.include('PUT');
+        pm.expect(pm.response.headers.get('Access-Control-Allow-Headers').toLowerCase()).to.include('x-csrf-token');
+      });
+examples: './.resources/preflight.resources/examples/'

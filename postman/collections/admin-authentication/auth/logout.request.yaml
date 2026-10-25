@@ -1,0 +1,34 @@
+$kind: http-request
+name: Logout
+order: 3000
+method: POST
+url: '{{baseUrl}}/api/admin/auth/v1/logout'
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: X-CSRF-Token
+    value: '{{csrfToken}}'
+  - key: Origin
+    value: '{{dashboardOrigin}}'
+body:
+  type: none
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      if (pm.response.code === 200) pm.collectionVariables.unset('csrfToken');
+      pm.test('Auth response is not cached', function () {
+        pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store');
+      });
+      pm.test('Logout response matches the auth contract', function () {
+        const body = pm.response.json();
+        if (pm.response.code === 200) {
+          pm.expect(body.code).to.eql('ADMS00000');
+          pm.expect(body.data).to.eql(null);
+        } else {
+          pm.expect([400, 403, 500]).to.include(pm.response.code);
+          pm.expect(body).to.include.keys('code', 'message', 'data');
+          pm.expect(body.data).to.eql(null);
+        }
+      });
+examples: './.resources/logout.resources/examples/'

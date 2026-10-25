@@ -1,0 +1,22 @@
+$kind: http-example
+name: Role name or code conflict
+order: 2000
+request:
+  method: POST
+  url: http://localhost:8080/api/admin/roles/v1/create
+  body:
+    type: json
+    content: |-
+      {"name":"Support Agent","code":"SUPPORT_AGENT","permissions":["role.read"]}
+response:
+  statusCode: 409
+  statusText: Conflict
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {"code":"ROLB02002","message":"Nama atau kode role sudah digunakan.","data":null}

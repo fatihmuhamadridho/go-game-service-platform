@@ -1,0 +1,27 @@
+$kind: http-example
+name: Dashboard origin is not allowed
+order: 6000
+request:
+  method: POST
+  url: http://localhost:8080/api/admin/auth/v1/login
+  headers:
+    - key: Origin
+      value: https://untrusted.example.test
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {"identifier":"{{identifier}}","password":"{{password}}"}
+response:
+  statusCode: 403
+  statusText: Forbidden
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {"code":"ADMB01002","message":"Origin dashboard tidak diizinkan.","data":null}

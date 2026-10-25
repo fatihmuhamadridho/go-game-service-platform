@@ -1,0 +1,24 @@
+$kind: http-request
+name: Preflight Admin Account List
+order: 3000
+method: OPTIONS
+url: '{{baseUrl}}/api/admin/admin-users/v1/list'
+headers:
+  - key: Origin
+    value: '{{dashboardOrigin}}'
+  - key: Access-Control-Request-Method
+    value: GET
+  - key: Access-Control-Request-Headers
+    value: x-csrf-token
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('Admin account GET preflight is accepted', function () { pm.response.to.have.status(204); });
+      pm.test('Admin account preflight allows exact origin and CSRF header', function () {
+        pm.expect(pm.response.headers.get('Access-Control-Allow-Origin')).to.eql(pm.environment.get('dashboardOrigin'));
+        pm.expect(pm.response.headers.get('Access-Control-Allow-Credentials')).to.eql('true');
+        pm.expect(pm.response.headers.get('Access-Control-Allow-Methods')).to.include('GET');
+        pm.expect(pm.response.headers.get('Access-Control-Allow-Headers')).to.include('X-CSRF-Token');
+      });
+examples: './.resources/preflight.resources/examples/'

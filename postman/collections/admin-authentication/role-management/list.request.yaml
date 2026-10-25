@@ -1,0 +1,37 @@
+$kind: http-request
+name: List Roles
+order: 1000
+method: GET
+url: '{{baseUrl}}/api/admin/roles/v1/list?search=&status=ACTIVE&sortBy=createdAt&sortOrder=DESC&page=1&limit=10'
+headers:
+  - key: Origin
+    value: '{{dashboardOrigin}}'
+  - key: X-CSRF-Token
+    value: '{{csrfToken}}'
+queryParams:
+  - key: search
+    value: ''
+    description: Optional case-insensitive role name or code search.
+  - key: status
+    value: ACTIVE
+  - key: sortBy
+    value: createdAt
+  - key: sortOrder
+    value: DESC
+  - key: page
+    value: '1'
+  - key: limit
+    value: '10'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('List returns HTTP 200', function () { pm.response.to.have.status(200); });
+      pm.test('List returns roles and pagination', function () {
+        const body = pm.response.json();
+        pm.expect(body.code).to.eql('ROLS00000');
+        pm.expect(body.data).to.be.an('array');
+        pm.expect(body.pagination).to.include.keys('page', 'limit', 'total', 'totalPages');
+      });
+      pm.test('Response is not cached', function () { pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store'); });
+examples: './.resources/list.resources/examples/'

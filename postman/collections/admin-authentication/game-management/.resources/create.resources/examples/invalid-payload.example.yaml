@@ -1,0 +1,22 @@
+$kind: http-example
+name: Invalid game payload
+order: 3000
+request:
+  method: POST
+  url: http://localhost:8080/api/admin/games/v1/create
+  body:
+    type: json
+    content: |-
+      {"name":"","slug":"not valid slug","imageUrl":"http://example.test/game.png"}
+response:
+  statusCode: 400
+  statusText: Bad Request
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {"code":"GAMB02001","message":"Invalid game request parameters.","data":null}

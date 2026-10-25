@@ -1,0 +1,29 @@
+$kind: http-example
+name: Refresh rate limit reached
+order: 4000
+request:
+  method: POST
+  url: http://localhost:8080/api/admin/auth/v1/refresh-token
+  headers:
+    - key: Origin
+      value: http://localhost:3000
+    - key: X-CSRF-Token
+      value: "{{csrfToken}}"
+response:
+  statusCode: 429
+  statusText: Too Many Requests
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+    - key: Retry-After
+      value: "900"
+  body:
+    type: json
+    content: |-
+      {
+        "code": "ADMB02002",
+        "message": "Batas rate limit tercapai.",
+        "data": null
+      }

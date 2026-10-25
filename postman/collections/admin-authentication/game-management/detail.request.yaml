@@ -1,0 +1,23 @@
+$kind: http-request
+name: Game Detail
+order: 2971
+method: GET
+url: '{{baseUrl}}/api/admin/games/v1/detail/{{gameId}}'
+headers:
+  - key: Origin
+    value: '{{dashboardOrigin}}'
+  - key: X-CSRF-Token
+    value: '{{csrfToken}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('Detail returns HTTP 200', function () { pm.response.to.have.status(200); });
+      pm.test('Detail returns a game record', function () {
+        const body = pm.response.json();
+        pm.expect(body.code).to.eql('GAMS00000');
+        pm.expect(body.data.id).to.eql(pm.environment.get('gameId'));
+        pm.expect(body.data).to.include.keys('name', 'slug', 'imageUrl', 'isActive', 'isPopular', 'sortOrder');
+      });
+      pm.test('Response is not cached', function () { pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store'); });
+examples: './.resources/detail.resources/examples/'

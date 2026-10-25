@@ -1,0 +1,39 @@
+$kind: http-request
+name: List Games
+order: 1000
+method: GET
+url: '{{baseUrl}}/api/admin/games/v1/list?q=&page=1&limit=20'
+headers:
+  - key: Origin
+    value: '{{dashboardOrigin}}'
+  - key: X-CSRF-Token
+    value: '{{csrfToken}}'
+queryParams:
+  - key: q
+    value: ''
+    description: Optional name or slug search.
+  - key: isActive
+    value: 'true'
+    disabled: true
+    description: Enable and set true or false to filter by active state.
+  - key: isPopular
+    value: 'true'
+    disabled: true
+    description: Enable and set true or false to filter by popular state.
+  - key: page
+    value: '1'
+  - key: limit
+    value: '20'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('List returns HTTP 200', function () { pm.response.to.have.status(200); });
+      pm.test('List returns data and pagination', function () {
+        const body = pm.response.json();
+        pm.expect(body.code).to.eql('GAMS00000');
+        pm.expect(body.data).to.be.an('array');
+        pm.expect(body.pagination).to.include.keys('page', 'limit', 'total', 'totalPages');
+      });
+      pm.test('Response is not cached', function () { pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store'); });
+examples: './.resources/list.resources/examples/'

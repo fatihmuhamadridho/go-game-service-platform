@@ -1,0 +1,46 @@
+$kind: http-request
+name: Login
+order: 1000
+method: POST
+url: '{{baseUrl}}/api/admin/auth/v1/login'
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Origin
+    value: '{{dashboardOrigin}}'
+body:
+  type: json
+  content: |-
+    {
+      "identifier": "{{identifier}}",
+      "password": "{{password}}"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      if (pm.response.code === 200) {
+        const body = pm.response.json();
+        if (body && body.data && body.data.csrfToken) pm.collectionVariables.set('csrfToken', body.data.csrfToken);
+      }
+      pm.test('Auth response is not cached', function () {
+        pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store');
+      });
+      pm.test('Login response matches the auth contract', function () {
+        const body = pm.response.json();
+        if (pm.response.code === 200) {
+          pm.expect(body.code).to.eql('ADMS00000');
+          pm.expect(body.data.csrfToken).to.be.a('string').and.not.empty;
+          pm.expect(body.data).not.to.have.any.keys('accessToken', 'refreshToken', 'passwordHash');
+        } else {
+          pm.expect([400, 401, 403, 429, 500]).to.include(pm.response.code);
+          pm.expect(body).to.include.keys('code', 'message', 'data');
+          pm.expect(body.data).to.eql(null);
+        }
+      });
+      if (pm.response.code === 429) {
+        pm.test('Rate limit includes Retry-After', function () {
+          pm.expect(pm.response.headers.get('Retry-After')).to.be.a('string').and.not.empty;
+        });
+      }
+examples: './.resources/login.resources/examples/'

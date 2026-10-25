@@ -1,0 +1,20 @@
+name: Game Service Platform - Local
+values:
+  - key: baseUrl
+    value: "http://localhost:8080"
+  - key: dashboardOrigin
+    value: "http://localhost:8080"
+    description: Must exactly match CORS_ALLOWED_ORIGINS in the API .env.
+  - key: identifier
+    value: ""
+  - key: password
+    value: ""
+  - key: gameId
+    value: ""
+    description: Set to the id returned by List Games; create responds with data null.
+  - key: roleId
+    value: ""
+    description: Set to the role id returned by List Roles; create responds with data null.
+  - key: adminId
+    value: ""
+    description: Set to an admin_ account id returned by List Admin Accounts.

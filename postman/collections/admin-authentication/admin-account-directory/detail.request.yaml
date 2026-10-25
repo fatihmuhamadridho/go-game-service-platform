@@ -1,0 +1,33 @@
+$kind: http-request
+name: Get Admin Account Detail
+order: 2000
+method: GET
+url: '{{baseUrl}}/api/admin/admin-users/v1/detail/{{adminId}}'
+headers:
+  - key: Origin
+    value: '{{dashboardOrigin}}'
+  - key: X-CSRF-Token
+    value: '{{csrfToken}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('Admin account detail matches the documented envelope', function () {
+        const body = pm.response.json();
+        if (pm.response.code === 200) {
+          pm.expect(body.code).to.eql('USRS00000');
+          pm.expect(body.data.id).to.eql(pm.environment.get('adminId'));
+          pm.expect(body.data).to.include.keys('username', 'name', 'email', 'status', 'role', 'lastActive', 'updatedAt');
+          pm.expect(body.data).not.to.have.any.keys('passwordHash', 'credential', 'refreshToken', 'csrfToken', 'session');
+        } else {
+          const expected = {400: 'USRB02001', 401: 'USRB01001', 403: 'USRB01002', 404: 'USRB02004', 429: 'USRB02007', 500: 'USRT03001'};
+          pm.expect(expected).to.have.property(String(pm.response.code));
+          pm.expect(body.code).to.eql(expected[pm.response.code]);
+          pm.expect(body.data).to.eql(null);
+          if (pm.response.code === 429) pm.expect(pm.response.headers.get('Retry-After')).to.be.a('string').and.not.empty;
+        }
+      });
+      pm.test('Admin account detail is not cached', function () {
+        pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store');
+      });
+examples: './.resources/detail.resources/examples/'

@@ -1,0 +1,22 @@
+$kind: http-example
+name: Create role
+order: 1000
+request:
+  method: POST
+  url: http://localhost:8080/api/admin/roles/v1/create
+  body:
+    type: json
+    content: |-
+      {"name":"Support Agent","code":"SUPPORT_AGENT","permissions":["role.read","game.read"]}
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {"code":"ROLS00000","message":"Role created","data":null}

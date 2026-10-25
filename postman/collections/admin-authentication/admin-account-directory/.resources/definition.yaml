@@ -1,0 +1,4 @@
+$kind: collection
+name: Admin Account Directory
+description: Read-only administrator account list and detail. Run Login first; the shared auth cookies and csrfToken are required.
+order: 4000

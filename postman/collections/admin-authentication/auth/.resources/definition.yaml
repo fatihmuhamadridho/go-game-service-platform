@@ -1,0 +1,4 @@
+$kind: collection
+name: Auth
+description: Admin login, refresh token, and logout. Run Login first to establish cookies and csrfToken.
+order: 1000

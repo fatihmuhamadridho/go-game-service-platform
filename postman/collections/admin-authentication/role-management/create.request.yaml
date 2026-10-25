@@ -1,0 +1,34 @@
+$kind: http-request
+name: Create Role
+order: 3000
+method: POST
+url: '{{baseUrl}}/api/admin/roles/v1/create'
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Origin
+    value: '{{dashboardOrigin}}'
+  - key: X-CSRF-Token
+    value: '{{csrfToken}}'
+body:
+  type: json
+  content: |-
+    {
+      "name": "Support Agent",
+      "code": "SUPPORT_AGENT",
+      "description": "Read-only support access",
+      "status": "ACTIVE",
+      "permissions": ["role.read", "game.read"]
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('Create returns HTTP 200', function () { pm.response.to.have.status(200); });
+      pm.test('Create returns success envelope', function () {
+        const body = pm.response.json();
+        pm.expect(body.code).to.eql('ROLS00000');
+        pm.expect(body).to.have.property('data', null);
+      });
+      pm.test('Response is not cached', function () { pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store'); });
+examples: './.resources/create.resources/examples/'

@@ -1,0 +1,35 @@
+$kind: http-example
+name: Role list
+order: 1000
+request:
+  method: GET
+  url: http://localhost:8080/api/admin/roles/v1/list?page=1&limit=10
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {
+        "code": "ROLS00000",
+        "message": "Role list retrieved",
+        "data": [
+          {
+            "id": "role_01JXYZ",
+            "name": "Super Admin",
+            "code": "SUPER_ADMIN",
+            "description": "System administrator role",
+            "status": "ACTIVE",
+            "isSystem": true,
+            "permissions": ["role.read", "role.create", "role.update", "role.delete", "admin-account.read", "game.read", "game.create", "game.update", "game.delete"],
+            "createdAt": "2026-10-11T09:45:00Z",
+            "updatedAt": "2026-10-11T09:45:00Z"
+          }
+        ],
+        "pagination": {"page": 1, "limit": 10, "total": 1, "totalPages": 1}
+      }
