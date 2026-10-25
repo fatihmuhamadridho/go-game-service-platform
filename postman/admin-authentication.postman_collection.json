@@ -1,0 +1,105 @@
+{
+  "info": {
+    "_postman_id": "4e22ac70-4312-4e0e-a018-7c766c31d980",
+    "name": "Game Service Platform - Admin Authentication",
+    "description": "Admin login, refresh-token, and logout endpoints. Cookies are managed by Postman; login/refresh tests save csrfToken for subsequent requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": { "type": "noauth" },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "identifier", "value": "superadmin" },
+    { "key": "password", "value": "" },
+    { "key": "csrfToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Origin", "value": "{{dashboardOrigin}}", "type": "text" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"identifier\": \"{{identifier}}\",\n  \"password\": \"{{password}}\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/admin/auth/v1/login",
+        "description": "Successful response stores cookies in the Postman jar and saves data.csrfToken. Admin needs a valid active role and Argon2id credential."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "  const body = pm.response.json();",
+              "  if (body && body.data && body.data.csrfToken) pm.collectionVariables.set('csrfToken', body.data.csrfToken);",
+              "}",
+              "pm.test('Response is JSON envelope', function () { pm.expect(pm.response.headers.get('Content-Type') || '').to.include('application/json'); });",
+              "pm.test('Auth response is not cached', function () { pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Refresh Token",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-CSRF-Token", "value": "{{csrfToken}}" },
+          { "key": "Origin", "value": "{{dashboardOrigin}}", "type": "text" }
+        ],
+        "body": { "mode": "raw", "raw": "", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/admin/auth/v1/refresh-token",
+        "description": "Requires refresh cookie from Login and the current CSRF token. Successful response rotates cookies and updates csrfToken."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "  const body = pm.response.json();",
+              "  if (body && body.data && body.data.csrfToken) pm.collectionVariables.set('csrfToken', body.data.csrfToken);",
+              "}",
+              "pm.test('Auth response is not cached', function () { pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Logout",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-CSRF-Token", "value": "{{csrfToken}}" },
+          { "key": "Origin", "value": "{{dashboardOrigin}}", "type": "text" }
+        ],
+        "body": { "mode": "raw", "raw": "", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/admin/auth/v1/logout",
+        "description": "Revokes the current session family and clears auth cookies. Can be repeated safely."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "if (pm.response.code === 200) pm.collectionVariables.unset('csrfToken');",
+              "pm.test('Auth response is not cached', function () { pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store'); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
