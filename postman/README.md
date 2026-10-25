@@ -2,14 +2,14 @@
 
 ## Use the Git-native workspace
 
-The collection is under `collections/admin-authentication/` and the shareable local environment is `environments/local.environment.yaml`. Open the repository as a Postman Native Git workspace, then select **Game Service Platform - Local** and set `identifier` and `password` for a seeded admin account. Keep credentials in Postman's local secret storage; do not commit them. For private per-machine overrides, use a file such as `environments/local.private.environment.yaml`; `.gitignore` excludes private environment files and generated Postman run output.
+The collection is under `collections/admin-authentication/` and the shareable local environment is `environments/local.environment.yaml`. Open the repository as a Postman Native Git workspace, then select **Game Service Platform - Local** and set `identifier` and `password` for an account created with `go run ./cmd/seed-admin` or provisioned separately. Keep credentials in Postman's local secret storage; do not commit them. For private per-machine overrides, use a file such as `environments/local.private.environment.yaml`; `.gitignore` excludes private environment files and generated Postman run output.
 
 ## Run
 
 1. Start API with `go run ./cmd/api` or `air`.
 2. Open the **Auth** folder and run **Login**. Postman stores auth cookies and the request script saves `csrfToken`.
 3. Open the **Game Management** folder and run List, Detail, Create, Update, or Delete. The folder reuses Login's cookies and `csrfToken`.
-4. Open **Role Management** and run List, Role Detail, Create, Update, or Delete. Every request sends the exact configured `Origin` and the current `csrfToken`; role endpoints require the matching `role.read/create/update/delete` grant. The seed process assigns the system catalog grants to Super Admin. Create returns `data: null`; copy the new role's `id` from List Roles into `roleId` before Detail, Update, or Delete.
+4. Open **Role Management** and run List, Role Detail, Create, Update, or Delete. Every request sends the exact configured `Origin` and the current `csrfToken`; role endpoints require the matching `role.read/create/update/delete` grant. The seeder grants the system catalog permissions to the `SUPER_ADMIN` role. Create returns `data: null`; copy the new role's `id` from List Roles into `roleId` before Detail, Update, or Delete.
 5. Open **Admin Account Directory** to list or view an admin profile. These endpoints require Login, `admin-account.read`, the exact dashboard `Origin`, and the current `csrfToken`; set `adminId` to an account ID for Detail.
 6. Open **Public Game Catalog** to call List or Popular without authentication. These public endpoints do not send cookies or CSRF tokens.
 7. In **Auth**, run **Refresh Token** to rotate session cookies and CSRF token, or **Logout** to revoke the session family and clear cookies.
@@ -28,7 +28,7 @@ Mutations are throttled at 60 requests/admin/minute and 1,200 requests/IP/minute
 
 ## Game management
 
-All game requests send the configured exact `Origin` and the `csrfToken` obtained by Login. The admin needs the endpoint permission (`game.read`, `game.create`, `game.update`, or `game.delete`); the seed process assigns these grants to Super Admin. Only system Super Admin can send `isActive` or `isPopular` in create/update payloads.
+All game requests send the configured exact `Origin` and the `csrfToken` obtained by Login. The admin needs the endpoint permission (`game.read`, `game.create`, `game.update`, or `game.delete`); the seeder assigns these grants to the system Super Admin role. Only system Super Admin can send `isActive` or `isPopular` in create/update payloads.
 
 - `GET {{baseUrl}}/api/admin/games/v1/list` — optional `q`, `isActive`, `isPopular`, `page`, and `limit` query parameters; page defaults to 1 and limit to 20 (maximum 100).
 - `GET {{baseUrl}}/api/admin/games/v1/detail/{{gameId}}` — requires a canonical game ID.

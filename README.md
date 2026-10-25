@@ -30,13 +30,11 @@ Endpoints:
 
 The service creates required indexes at startup. Production requires HTTPS because auth cookies are `Secure` and use the `__Host-` prefix. Local-only `AUTH_ALLOW_INSECURE_HTTP=true` permits non-HTTPS requests from loopback clients and uses non-Secure, `SameSite=Lax` cookies without the `__Host-` prefix; it can connect to local MongoDB or Atlas. Non-loopback requests still require HTTPS. Behind a TLS-terminating proxy, keep the option false, set `TRUSTED_PROXY_CIDRS`, and forward `X-Forwarded-Proto: https` plus the client chain in `X-Forwarded-For`; untrusted forwarding headers are ignored.
 
-## Bootstrap the initial Super Admin
+## Seed a Super Admin account
 
-The API never creates a default administrator. Install Bash and MongoDB Shell (`mongosh`) and make sure both are on `PATH`. Generate an Argon2id hash with `go run ./internal/utils/hash-password` in a trusted terminal; password input is hidden and confirmed. Inject the resulting encoded hash and account attributes as environment variables, then run `bash scripts/seed-admin.sh`. The shell seeder reads MongoDB and admin settings from the process environment or local `.env`, creates the required indexes, and atomically seeds the system permission catalog, immutable role, account, credential, assignment, and Super Admin grants. To add or repair the permission catalog and Super Admin grants without changing account credentials, run `bash scripts/seed-admin.sh --permissions-only`.
+Set `MONGODB_URL` and optional `MONGODB_DATABASE` in the process environment or local `.env`, then run `go run ./cmd/seed-admin`. The command prompts for username, display name, email, and optionally an account ID. Leave the ID blank to generate a new one. It prompts for the password without echoing it, confirms it, and creates an Argon2id hash in memory. MongoDB Shell (`mongosh`) is not required.
 
-Required seed variables: `MONGODB_URL`, optional `MONGODB_DATABASE` (derived from the URI path when omitted), `ADMIN_ACCOUNT_ID` (`admin_` prefix), `ADMIN_USERNAME`, `ADMIN_NAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD_HASH`. Seeding is transactional and idempotent. It refuses conflicting or modified system-role/account records and never changes an existing password hash. Unit validation is covered by `go test ./...`; live transaction behavior can be exercised with `MONGODB_TEST_URL` pointed at a disposable replica set.
-
-Do not place raw passwords or signing keys in command-line arguments, source control, shell history, or logs. Keep the generated hash in secret-managed environment injection while seeding.
+The command idempotently seeds the permission catalog, immutable `SUPER_ADMIN` role and grants, then transactionally creates the admin account, credential, and role assignment. Run it again with a new username/email to create another Super Admin. Reusing an existing account ID only verifies the existing account and does not replace its password. Use `go run ./cmd/seed-admin --permissions-only` when you only need to seed or repair the reference catalog and grants. The API itself never creates a default administrator. Do not put raw passwords or signing keys in command-line arguments, source control, shell history, or logs.
 
 ## MVC layout
 
@@ -49,7 +47,7 @@ Do not place raw passwords or signing keys in command-line arguments, source con
 - `internal/order`: Reserved MVC module skeleton for order features.
 - `internal/platform/database`: MongoDB client connection and database platform setup.
 - `internal/config`: Runtime configuration validation.
-- `internal/utils`: Shared helpers; `hash-password` generates Argon2id hashes for controlled bootstrap.
+- `internal/utils`: Shared helpers; `hash-password` securely prompts for and generates Argon2id hashes during admin seeding.
 
 ## Security behavior
 
@@ -67,55 +65,55 @@ Do not place raw passwords or signing keys in command-line arguments, source con
 
 ## BE-TASKS coverage
 
-| Task | Implementation and verification |
-| --- | --- |
+| Task        | Implementation and verification                                                                                                                                                                                                                                           |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | BE-AUTH-001 | `internal/auth/handler.go` JWT/session middleware; `repository.go` resolves account and current role/permissions per request; `a_test_handler_test.go` covers current permission, revoked session behavior through the repository integration test, and safe auth errors. |
-| BE-AUTH-002 | `AuthService.Login` validates and normalizes identifier; Mongo lookup uses case-insensitive collation and requires active account, credential, and exactly one active role; tests cover trimmed email lookup, generic credential failure, invalid input, and Argon2id. |
-| BE-AUTH-003 | CORS exact-origin and preflight checks in handler; Mongo rolling-window IP and identifier rate limits; tests cover rejected/missing Origin, credentialed CORS, preflight, throttling, and `Retry-After`. |
-| BE-AUTH-004 | Token/cookie issuance in `service.go`, `token.go`, and `handler.go`; session stores only token digests; tests verify JWT claims, opaque token, cookie attributes, and no-store response behavior. |
-| BE-AUTH-005 | `RotateSession` transaction rotates generations and revokes replayed families; Mongo integration test covers rotation, replay, and family revocation. |
-| BE-AUTH-006 | Logout is idempotent, validates CSRF for an active family, revokes that family, and clears both cookies only after successful store operation; handler tests cover repeated logout and store failure. |
-| BE-AUTH-007 | `scripts/seed-admin.sh` uses MongoDB Shell to bootstrap one immutable `SUPER_ADMIN`, active account, Argon2id credential, role assignment, and permission grants; `RevokeAccountSessions` is the account offboarding hook. |
-| BE-AUTH-008 | `EnsureIndexes` and `scripts/seed-admin.sh` create ERD unique, collation, partial, family/account, and TTL indexes; repository test files cover index definitions and Mongo integration behavior. |
-| BE-GAME-001 | Game routes reuse current session state, require exact `game.*` permission, enforce CSRF and Origin, and permit publication flags only for system Super Admins; auth/game handler tests cover permission, CSRF, and CORS methods. |
-| BE-GAME-002 | Admin list validates IFA query parameters, searches name/slug, filters active/popular state, excludes tombstones, and uses stable sort and pagination; handler and Mongo integration tests cover behavior. |
-| BE-GAME-003 | Detail validates canonical `game_` ULID IDs and hides tombstones; model and repository tests cover ID and visibility behavior. |
-| BE-GAME-004 | Create validates and normalizes catalog fields, applies inactive defaults, allocates unique sort order, and maps unique conflicts; service and Mongo integration tests cover defaults, conflicts, and concurrency. |
-| BE-GAME-005 | Update applies only supplied mutable fields, rejects publication changes by other admins, enforces final state/uniqueness, and skips writes for no-op changes. |
-| BE-GAME-006 | Delete atomically sets tombstone and clears publication flags; repeated delete is idempotent and retained data remains unavailable to readers. |
-| BE-GAME-007 | Mongo unique/collation/query/TTL indexes, rolling one-minute rate limits, public visibility query, and safe error mapping are covered by unit and optional Mongo integration tests. |
+| BE-AUTH-002 | `AuthService.Login` validates and normalizes identifier; Mongo lookup uses case-insensitive collation and requires active account, credential, and exactly one active role; tests cover trimmed email lookup, generic credential failure, invalid input, and Argon2id.    |
+| BE-AUTH-003 | CORS exact-origin and preflight checks in handler; Mongo rolling-window IP and identifier rate limits; tests cover rejected/missing Origin, credentialed CORS, preflight, throttling, and `Retry-After`.                                                                  |
+| BE-AUTH-004 | Token/cookie issuance in `service.go`, `token.go`, and `handler.go`; session stores only token digests; tests verify JWT claims, opaque token, cookie attributes, and no-store response behavior.                                                                         |
+| BE-AUTH-005 | `RotateSession` transaction rotates generations and revokes replayed families; Mongo integration test covers rotation, replay, and family revocation.                                                                                                                     |
+| BE-AUTH-006 | Logout is idempotent, validates CSRF for an active family, revokes that family, and clears both cookies only after successful store operation; handler tests cover repeated logout and store failure.                                                                     |
+| BE-AUTH-007 | `cmd/seed-admin` creates a Super Admin account from interactive username/password input and seeds the system role grants; `RevokeAccountSessions` is the account offboarding hook.                                                                                        |
+| BE-AUTH-008 | API startup and `cmd/seed-admin` create ERD unique, collation, partial, family/account, and TTL indexes; repository test files cover index definitions and Mongo integration behavior.                                                                                    |
+| BE-GAME-001 | Game routes reuse current session state, require exact `game.*` permission, enforce CSRF and Origin, and permit publication flags only for system Super Admins; auth/game handler tests cover permission, CSRF, and CORS methods.                                         |
+| BE-GAME-002 | Admin list validates IFA query parameters, searches name/slug, filters active/popular state, excludes tombstones, and uses stable sort and pagination; handler and Mongo integration tests cover behavior.                                                                |
+| BE-GAME-003 | Detail validates canonical `game_` ULID IDs and hides tombstones; model and repository tests cover ID and visibility behavior.                                                                                                                                            |
+| BE-GAME-004 | Create validates and normalizes catalog fields, applies inactive defaults, allocates unique sort order, and maps unique conflicts; service and Mongo integration tests cover defaults, conflicts, and concurrency.                                                        |
+| BE-GAME-005 | Update applies only supplied mutable fields, rejects publication changes by other admins, enforces final state/uniqueness, and skips writes for no-op changes.                                                                                                            |
+| BE-GAME-006 | Delete atomically sets tombstone and clears publication flags; repeated delete is idempotent and retained data remains unavailable to readers.                                                                                                                            |
+| BE-GAME-007 | Mongo unique/collation/query/TTL indexes, rolling one-minute rate limits, public visibility query, and safe error mapping are covered by unit and optional Mongo integration tests.                                                                                       |
 
 ## BE-ROLE coverage
 
-| Task | Implementation |
-| --- | --- |
-| BE-ROLE-001 | `scripts/seed-admin.sh` seeds the nine system permission keys idempotently and preserves the immutable system Super Admin role. |
+| Task        | Implementation                                                                                                                                                                                       |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BE-ROLE-001 | `cmd/seed-admin` seeds the nine system permission keys idempotently and preserves the immutable system Super Admin role.                                                                             |
 | BE-ROLE-002 | Role routes reuse current auth-session resolution and require explicit current permission grants, including for Super Admin; exact-Origin CORS and CSRF validation apply to read and write requests. |
-| BE-ROLE-003 | Role list validates IFA query parameters, searches name/code case-insensitively, filters status, sorts deterministically, paginates, and returns permission keys. |
-| BE-ROLE-004 | Role detail validates `role_` IDs and returns only active, non-deleted roles with current permission keys. |
-| BE-ROLE-005 | Role create normalizes fields, validates active catalog permissions, and inserts role plus grants in one MongoDB transaction. |
-| BE-ROLE-006 | Role update preserves omitted fields, replaces supplied grants atomically, protects system roles, blocks deactivation with active assignments, and skips no-op writes. |
-| BE-ROLE-007 | Role delete soft-deletes custom roles, rejects active assignments/system role, and treats retained tombstones idempotently. |
-| BE-ROLE-008 | Startup configures role, grant, permission, and assignment indexes; role endpoints apply per-minute IP/admin throttles and safe status mapping. |
+| BE-ROLE-003 | Role list validates IFA query parameters, searches name/code case-insensitively, filters status, sorts deterministically, paginates, and returns permission keys.                                    |
+| BE-ROLE-004 | Role detail validates `role_` IDs and returns only active, non-deleted roles with current permission keys.                                                                                           |
+| BE-ROLE-005 | Role create normalizes fields, validates active catalog permissions, and inserts role plus grants in one MongoDB transaction.                                                                        |
+| BE-ROLE-006 | Role update preserves omitted fields, replaces supplied grants atomically, protects system roles, blocks deactivation with active assignments, and skips no-op writes.                               |
+| BE-ROLE-007 | Role delete soft-deletes custom roles, rejects active assignments/system role, and treats retained tombstones idempotently.                                                                          |
+| BE-ROLE-008 | Startup configures role, grant, permission, and assignment indexes; role endpoints apply per-minute IP/admin throttles and safe status mapping.                                                      |
 
 ## BE-ADMIN coverage
 
-| Task | Implementation |
-| --- | --- |
-| BE-ADMIN-001 | Shared session middleware, current `admin-account.read` permission, exact-Origin CORS, CSRF validation, and a projection that excludes credentials and session data. |
-| BE-ADMIN-002 | List filters search/status/roleId and pagination, joins the active role, excludes deleted accounts, and sorts by username then account ID. |
-| BE-ADMIN-003 | Detail validates `admin_` identifiers, returns profile and active role, and maps absent/deleted accounts to 404. |
+| Task         | Implementation                                                                                                                                                                         |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BE-ADMIN-001 | Shared session middleware, current `admin-account.read` permission, exact-Origin CORS, CSRF validation, and a projection that excludes credentials and session data.                   |
+| BE-ADMIN-002 | List filters search/status/roleId and pagination, joins the active role, excludes deleted accounts, and sorts by username then account ID.                                             |
+| BE-ADMIN-003 | Detail validates `admin_` identifiers, returns profile and active role, and maps absent/deleted accounts to 404.                                                                       |
 | BE-ADMIN-004 | Mongo aggregation validates the single-active-role invariant; existing account/assignment/role indexes support joins; shared rolling limits enforce 600/admin and 1,200/IP per minute. |
-| BE-ADMIN-005 | Invalid, unauthenticated, forbidden, missing, throttled, and technical failures map to safe `USR` envelopes. |
+| BE-ADMIN-005 | Invalid, unauthenticated, forbidden, missing, throttled, and technical failures map to safe `USR` envelopes.                                                                           |
 
 ## BE-PUBGAME coverage
 
-| Task | Implementation |
-| --- | --- |
+| Task           | Implementation                                                                                                                    |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | BE-PUBGAME-001 | Public list supports documented filters, search, sorting and pagination, while ignoring unknown parameters and `Accept-Language`. |
-| BE-PUBGAME-002 | List returns an approved public projection of active, non-deleted games and pagination metadata. |
-| BE-PUBGAME-003 | Popular list constrains visibility to active, popular and non-deleted games with documented pagination. |
-| BE-PUBGAME-004 | Public query index, rolling IP limit, `Retry-After`, and documented error envelopes are wired at startup. |
+| BE-PUBGAME-002 | List returns an approved public projection of active, non-deleted games and pagination metadata.                                  |
+| BE-PUBGAME-003 | Popular list constrains visibility to active, popular and non-deleted games with documented pagination.                           |
+| BE-PUBGAME-004 | Public query index, rolling IP limit, `Retry-After`, and documented error envelopes are wired at startup.                         |
 
 ## Verify
 
