@@ -1,0 +1,34 @@
+$kind: http-example
+name: Session refreshed
+order: 1000
+request:
+  method: POST
+  url: http://localhost:8080/api/admin/auth/v1/refresh-token
+  headers:
+    - key: Origin
+      value: http://localhost:3000
+    - key: X-CSRF-Token
+      value: "{{csrfToken}}"
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+    - key: Set-Cookie
+      value: __Host-jokihub-admin-access=<redacted>; Max-Age=900; Path=/; HttpOnly; Secure; SameSite=None
+    - key: Set-Cookie
+      value: __Host-jokihub-admin-refresh=<redacted>; Max-Age=604800; Path=/; HttpOnly; Secure; SameSite=None
+  body:
+    type: json
+    content: |-
+      {
+        "code": "ADMS00000",
+        "message": "Session admin diperbarui.",
+        "data": {
+          "accessExpiresIn": 900,
+          "csrfToken": "<redacted-csrf-token>"
+        }
+      }

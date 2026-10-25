@@ -1,0 +1,27 @@
+$kind: http-example
+name: Invalid login payload
+order: 5000
+request:
+  method: POST
+  url: http://localhost:8080/api/admin/auth/v1/login
+  headers:
+    - key: Origin
+      value: http://localhost:8080
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {"identifier":"","password":""}
+response:
+  statusCode: 400
+  statusText: Bad Request
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {"code":"ADMB02001","message":"Payload autentikasi tidak valid.","data":null}

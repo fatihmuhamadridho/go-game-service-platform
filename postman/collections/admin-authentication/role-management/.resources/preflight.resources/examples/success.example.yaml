@@ -1,0 +1,28 @@
+$kind: http-example
+name: Role PUT preflight accepted
+order: 1000
+request:
+  method: OPTIONS
+  url: http://localhost:8080/api/admin/roles/v1/update/role_01JXYZ
+  headers:
+    - key: Origin
+      value: http://localhost:8080
+    - key: Access-Control-Request-Method
+      value: PUT
+    - key: Access-Control-Request-Headers
+      value: content-type, x-csrf-token
+response:
+  statusCode: 204
+  statusText: No Content
+  headers:
+    - key: Access-Control-Allow-Origin
+      value: http://localhost:8080
+    - key: Access-Control-Allow-Credentials
+      value: 'true'
+    - key: Access-Control-Allow-Methods
+      value: 'GET, POST, PUT, DELETE, OPTIONS'
+    - key: Access-Control-Allow-Headers
+      value: 'Content-Type, X-CSRF-Token, X-Request-Id'
+  body:
+    type: text
+    content: ''

@@ -1,0 +1,23 @@
+$kind: http-request
+name: Preflight Public Game List
+order: 3000
+method: OPTIONS
+url: '{{baseUrl}}/api/games/v1/list'
+headers:
+  - key: Origin
+    value: 'https://storefront.example.test'
+  - key: Access-Control-Request-Method
+    value: GET
+  - key: Access-Control-Request-Headers
+    value: x-request-id
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('Public catalog preflight is accepted without credentials', function () {
+        pm.response.to.have.status(204);
+        pm.expect(pm.response.headers.get('Access-Control-Allow-Origin')).to.eql('*');
+        pm.expect(pm.response.headers.get('Access-Control-Allow-Credentials')).to.not.exist;
+        pm.expect(pm.response.headers.get('Access-Control-Allow-Methods')).to.include('GET');
+      });
+examples: './.resources/preflight.resources/examples/'

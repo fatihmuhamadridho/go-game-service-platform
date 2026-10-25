@@ -1,0 +1,22 @@
+$kind: http-example
+name: System role cannot be updated
+order: 2000
+request:
+  method: PUT
+  url: http://localhost:8080/api/admin/roles/v1/update/role_super_admin
+  body:
+    type: json
+    content: |-
+      {"description":"Updated description"}
+response:
+  statusCode: 409
+  statusText: Conflict
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {"code":"ROLB02005","message":"Role system tidak dapat diubah.","data":null}

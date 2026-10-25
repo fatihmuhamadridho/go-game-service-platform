@@ -1,0 +1,18 @@
+$kind: http-example
+name: Game read permission denied
+order: 4000
+request:
+  method: GET
+  url: http://localhost:8080/api/admin/games/v1/list?page=1&limit=20
+response:
+  statusCode: 403
+  statusText: Forbidden
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {"code":"GAMB01002","message":"Game catalog access is not permitted.","data":null}

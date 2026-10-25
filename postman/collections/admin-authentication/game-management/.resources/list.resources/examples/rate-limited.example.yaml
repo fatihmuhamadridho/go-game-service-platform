@@ -1,0 +1,20 @@
+$kind: http-example
+name: Game list rate limited
+order: 3000
+request:
+  method: GET
+  url: http://localhost:8080/api/admin/games/v1/list?page=1&limit=20
+response:
+  statusCode: 429
+  statusText: Too Many Requests
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+    - key: Retry-After
+      value: '60'
+  body:
+    type: json
+    content: |-
+      {"code":"GAMB02005","message":"Rate limit exceeded.","data":null}

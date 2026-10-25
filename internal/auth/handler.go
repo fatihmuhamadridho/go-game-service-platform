@@ -63,33 +63,35 @@ func (h *AdminAuthHandler) Middleware(next http.Handler) http.Handler {
 		accessName, _ := authCookieNames(!h.allowInsecureHTTP)
 		cookie, err := request.Cookie(accessName)
 		if err != nil {
-			writeServiceError(writer, serviceErr("ADMB01003", 401, nil))
+			h.writeRequestError(writer, request, serviceErr("ADMB01003", 401, nil))
 			return
 		}
 		claims, err := h.tokens.ParseAccess(cookie.Value, time.Now().UTC())
 		if err != nil {
 			h.clearAuthCookies(writer)
-			writeServiceError(writer, serviceErr("ADMB01003", 401, nil))
+			h.writeRequestError(writer, request, serviceErr("ADMB01003", 401, nil))
 			return
 		}
 		profile, active, err := h.data.ResolveAccess(request.Context(), claims.FamilyID, claims.Subject, time.Now().UTC())
 		if err != nil {
-			writeServiceError(writer, serviceErr("ADMT03001", 500, err))
+			h.writeRequestError(writer, request, serviceErr("ADMT03001", 500, err))
 			return
 		}
 		if !active {
 			h.clearAuthCookies(writer)
-			writeServiceError(writer, serviceErr("ADMB01003", 401, nil))
+			h.writeRequestError(writer, request, serviceErr("ADMB01003", 401, nil))
 			return
 		}
-		if request.Method != http.MethodGet && request.Method != http.MethodHead && request.Method != http.MethodOptions {
+		requireCSRF := request.Method != http.MethodGet && request.Method != http.MethodHead && request.Method != http.MethodOptions
+		requireCSRF = requireCSRF || isGameRequest(request) || isRoleRequest(request) || isAdminUserRequest(request)
+		if requireCSRF && request.Method != http.MethodOptions {
 			valid, err := h.data.ValidateCSRF(request.Context(), claims.FamilyID, utils.DigestToken(request.Header.Get(csrfHeader)))
 			if err != nil {
-				writeServiceError(writer, serviceErr("ADMT03001", 500, err))
+				h.writeRequestError(writer, request, serviceErr("ADMT03001", 500, err))
 				return
 			}
 			if !valid {
-				writeServiceError(writer, serviceErr("ADMB01004", 403, nil))
+				h.writeRequestError(writer, request, serviceErr("ADMB01004", 403, nil))
 				return
 			}
 		}
@@ -101,10 +103,10 @@ func (h *AdminAuthHandler) RequirePermission(permission string, next http.Handle
 	return h.Middleware(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		profile, ok := request.Context().Value(adminContextKey{}).(AdminProfile)
 		if !ok {
-			writeServiceError(writer, serviceErr("ADMB01003", 401, nil))
+			h.writeRequestError(writer, request, serviceErr("ADMB01003", 401, nil))
 			return
 		}
-		allowed := profile.Role.Code == "SUPER_ADMIN" && profile.Role.System
+		allowed := false
 		for _, current := range profile.Perms {
 			if current == permission {
 				allowed = true
@@ -112,11 +114,138 @@ func (h *AdminAuthHandler) RequirePermission(permission string, next http.Handle
 			}
 		}
 		if !allowed {
-			writeServiceError(writer, serviceErr("ADMB01005", 403, nil))
+			h.writeRequestError(writer, request, serviceErr("ADMB01005", 403, nil))
 			return
 		}
 		next.ServeHTTP(writer, request)
 	}))
+}
+
+func AdminProfileFromRequest(request *http.Request) (AdminProfile, bool) {
+	profile, ok := request.Context().Value(adminContextKey{}).(AdminProfile)
+	return profile, ok
+}
+
+func ClientIP(request *http.Request, trustedProxies []*net.IPNet) string {
+	return requestIP(request, trustedProxies)
+}
+
+func isGameRequest(request *http.Request) bool {
+	return strings.HasPrefix(request.URL.Path, "/api/admin/games/v1/")
+}
+
+func isRoleRequest(request *http.Request) bool {
+	return strings.HasPrefix(request.URL.Path, "/api/admin/roles/v1/")
+}
+
+func isAdminUserRequest(request *http.Request) bool {
+	return strings.HasPrefix(request.URL.Path, "/api/admin/admin-users/v1/")
+}
+
+func isPublicCatalogRequest(request *http.Request) bool {
+	switch request.URL.Path {
+	case "/api/games/v1/list", "/api/games/v1/popular":
+		return true
+	default:
+		return false
+	}
+}
+
+func (h *AdminAuthHandler) writeRequestError(writer http.ResponseWriter, request *http.Request, err error) {
+	if isAdminUserRequest(request) {
+		var typed *ServiceError
+		if !errors.As(err, &typed) {
+			typed = &ServiceError{Code: "USRT03001", HTTPStatus: http.StatusInternalServerError}
+		}
+		code := "USRT03001"
+		switch typed.Code {
+		case "ADMB01003":
+			code = "USRB01001"
+		case "ADMB01002", "ADMB01004", "ADMB01005", "ADMB01006":
+			code = "USRB01002"
+		case "ADMB02001":
+			code = "USRB02001"
+		case "ADMB02002":
+			code = "USRB02007"
+		}
+		message := map[string]string{
+			"USRB01001": "Sesi admin tidak tersedia atau tidak valid.",
+			"USRB01002": "Permission ditolak.",
+			"USRB02001": "Query atau filter tidak valid.",
+			"USRB02007": "Batas request akun admin tercapai.",
+			"USRT03001": "Kegagalan persistence akun admin.",
+		}[code]
+		if typed.HTTPStatus <= 0 {
+			typed.HTTPStatus = http.StatusInternalServerError
+		}
+		if typed.HTTPStatus == http.StatusTooManyRequests {
+			seconds := int(typed.RetryAfter.Seconds())
+			if seconds < 1 {
+				seconds = 1
+			}
+			writer.Header().Set("Retry-After", strconv.Itoa(seconds))
+		}
+		utils.WriteJSON(writer, typed.HTTPStatus, utils.ResponseEnvelope{Code: code, Message: message, Data: nil})
+		return
+	}
+	if isRoleRequest(request) {
+		var typed *ServiceError
+		if !errors.As(err, &typed) {
+			typed = &ServiceError{Code: "ROLT03001", HTTPStatus: http.StatusInternalServerError}
+		}
+		code := "ROLT03001"
+		switch typed.Code {
+		case "ADMB01003":
+			code = "ROLB01001"
+		case "ADMB01002", "ADMB01004", "ADMB01005", "ADMB01006":
+			code = "ROLB01002"
+		case "ADMB02001":
+			code = "ROLB02001"
+		case "ADMB02002":
+			code = "ROLB02007"
+		}
+		message := map[string]string{"ROLB01001": "Administrator belum terautentikasi.", "ROLB01002": "Akses role tidak diizinkan.", "ROLB02001": "Parameter role tidak valid.", "ROLB02007": "Batas request role tercapai.", "ROLT03001": "Role service is temporarily unavailable."}[code]
+		if typed.HTTPStatus == http.StatusTooManyRequests {
+			seconds := int(typed.RetryAfter.Seconds())
+			if seconds < 1 {
+				seconds = 1
+			}
+			writer.Header().Set("Retry-After", strconv.Itoa(seconds))
+		}
+		utils.WriteJSON(writer, typed.HTTPStatus, utils.ResponseEnvelope{Code: code, Message: message, Data: nil})
+		return
+	}
+	if !isGameRequest(request) {
+		writeServiceError(writer, err)
+		return
+	}
+	var typed *ServiceError
+	if !errors.As(err, &typed) {
+		typed = &ServiceError{Code: "GAMT03001", HTTPStatus: http.StatusInternalServerError}
+	}
+	code := "GAMT03001"
+	switch typed.Code {
+	case "ADMB01003":
+		code = "GAMB01001"
+	case "ADMB01002", "ADMB01004", "ADMB01005", "ADMB01006":
+		code = "GAMB01002"
+	case "ADMB02001":
+		code = "GAMB02001"
+	}
+	utils.WriteJSON(writer, typed.HTTPStatus, utils.ResponseEnvelope{Code: code, Message: gameAuthErrorMessage(code), Data: nil})
+}
+
+func gameAuthErrorMessage(code string) string {
+	switch code {
+	case "GAMB01001":
+		return "Administrator belum terautentikasi."
+	case "GAMB01002":
+		return "Akses katalog game tidak diizinkan."
+	case "GAMB02001":
+		return "Parameter request game tidak valid."
+	default:
+		return "Game catalog is temporarily unavailable."
+	}
 }
 
 func (h *AdminAuthHandler) login(writer http.ResponseWriter, request *http.Request) {
@@ -192,7 +321,7 @@ func (h *AdminAuthHandler) logout(writer http.ResponseWriter, request *http.Requ
 				writeServiceError(writer, serviceErr("ADMT03001", 500, findErr))
 				return
 			}
-			if findErr == nil && session.RevokedAt == nil && session.RotatedAt == nil && session.ExpiresAt.After(time.Now().UTC()) {
+			if findErr == nil && session.RevokedAt == nil && session.ExpiresAt.After(time.Now().UTC()) {
 				familyID = session.FamilyID
 			}
 		}
@@ -229,34 +358,13 @@ func requireEmptyBody(writer http.ResponseWriter, request *http.Request) bool {
 func (h *AdminAuthHandler) CORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Cache-Control", "no-store")
-		origin := request.Header.Get("Origin")
-		// Non-browser clients such as curl/Postman do not send Origin. CORS is
-		// only enforced for browser requests that include the header.
-		if origin == "" {
-			if !(h.allowInsecureHTTP && isLoopbackRequest(request)) && !isSecureRequest(request, h.trustedProxies) {
-				writeServiceError(writer, serviceErr("ADMB01006", 403, nil))
-				return
-			}
-			if request.Method != http.MethodPost {
-				writeServiceError(writer, serviceErr("ADMB02001", 400, nil))
-				return
-			}
-			if request.URL.Path == "/api/admin/auth/v1/login" || request.URL.Path == "/api/admin/auth/v1/refresh-token" {
-				retry, allowed, err := h.service.Limiter.Allow(request.Context(), "ip:"+utils.DigestToken(requestIP(request, h.trustedProxies)), IPRequestLimit, time.Now().UTC())
-				if err != nil {
-					writeServiceError(writer, serviceErr("ADMT03001", 500, err))
-					return
-				}
-				if !allowed {
-					writeServiceError(writer, &ServiceError{Code: "ADMB02002", HTTPStatus: 429, RetryAfter: retry})
-					return
-				}
-			}
-			next.ServeHTTP(writer, request)
+		if isPublicCatalogRequest(request) {
+			h.publicCatalogCORS(writer, request, next)
 			return
 		}
+		origin := request.Header.Get("Origin")
 		if _, allowed := h.origins[origin]; !allowed {
-			writeServiceError(writer, serviceErr("ADMB01002", 403, nil))
+			h.writeRequestError(writer, request, serviceErr("ADMB01002", 403, nil))
 			return
 		}
 		writer.Header().Set("Access-Control-Allow-Origin", origin)
@@ -264,22 +372,24 @@ func (h *AdminAuthHandler) CORS(next http.Handler) http.Handler {
 		writer.Header().Set("Access-Control-Expose-Headers", "Retry-After")
 		writer.Header().Add("Vary", "Origin")
 		if !(h.allowInsecureHTTP && isLoopbackRequest(request)) && !isSecureRequest(request, h.trustedProxies) {
-			writeServiceError(writer, serviceErr("ADMB01006", 403, nil))
+			h.writeRequestError(writer, request, serviceErr("ADMB01006", 403, nil))
 			return
 		}
 		if request.Method == http.MethodOptions {
-			if request.Header.Get("Access-Control-Request-Method") != http.MethodPost || !allowedPreflightHeaders(request.Header.Get("Access-Control-Request-Headers")) {
-				writeServiceError(writer, serviceErr("ADMB01002", 403, nil))
+			requestedMethod := strings.ToUpper(strings.TrimSpace(request.Header.Get("Access-Control-Request-Method")))
+			methods := corsMethods(request)
+			if !containsString(methods, requestedMethod) || !allowedPreflightHeaders(request.Header.Get("Access-Control-Request-Headers")) {
+				h.writeRequestError(writer, request, serviceErr("ADMB01002", 403, nil))
 				return
 			}
-			writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-			writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token")
+			writer.Header().Set("Access-Control-Allow-Methods", strings.Join(append(methods, "OPTIONS"), ", "))
+			writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token, X-Request-Id")
 			writer.Header().Set("Access-Control-Max-Age", "600")
 			writer.WriteHeader(http.StatusNoContent)
 			return
 		}
-		if request.Method != http.MethodPost {
-			writeServiceError(writer, serviceErr("ADMB02001", 400, nil))
+		if !containsString(corsMethods(request), request.Method) {
+			h.writeRequestError(writer, request, serviceErr("ADMB02001", 400, nil))
 			return
 		}
 		if request.URL.Path == "/api/admin/auth/v1/login" || request.URL.Path == "/api/admin/auth/v1/refresh-token" {
@@ -297,8 +407,65 @@ func (h *AdminAuthHandler) CORS(next http.Handler) http.Handler {
 	})
 }
 
+func (h *AdminAuthHandler) publicCatalogCORS(writer http.ResponseWriter, request *http.Request, next http.Handler) {
+	writer.Header().Set("Access-Control-Allow-Origin", "*")
+	if request.Method == http.MethodOptions {
+		requestedMethod := strings.ToUpper(strings.TrimSpace(request.Header.Get("Access-Control-Request-Method")))
+		if (requestedMethod != "" && requestedMethod != http.MethodGet) || !allowedPublicPreflightHeaders(request.Header.Get("Access-Control-Request-Headers")) {
+			writer.WriteHeader(http.StatusForbidden)
+			return
+		}
+		writer.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		writer.Header().Set("Access-Control-Allow-Headers", "X-Request-Id")
+		writer.Header().Set("Access-Control-Max-Age", "600")
+		writer.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if request.Method != http.MethodGet {
+		writer.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	next.ServeHTTP(writer, request)
+}
+
+func allowedPublicPreflightHeaders(value string) bool {
+	allowed := map[string]bool{"x-request-id": true}
+	for _, header := range strings.Split(value, ",") {
+		header = strings.ToLower(strings.TrimSpace(header))
+		if header != "" && !allowed[header] {
+			return false
+		}
+	}
+	return true
+}
+
+func corsMethods(request *http.Request) []string {
+	if isPublicCatalogRequest(request) {
+		return []string{http.MethodGet}
+	}
+	if isAdminUserRequest(request) {
+		return []string{http.MethodGet}
+	}
+	if isRoleRequest(request) {
+		return []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete}
+	}
+	if isGameRequest(request) {
+		return []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete}
+	}
+	return []string{http.MethodPost}
+}
+
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
+}
+
 func allowedPreflightHeaders(value string) bool {
-	allowed := map[string]bool{"content-type": true, "x-csrf-token": true}
+	allowed := map[string]bool{"content-type": true, "x-csrf-token": true, "x-request-id": true}
 	for _, header := range strings.Split(value, ",") {
 		header = strings.ToLower(strings.TrimSpace(header))
 		if header != "" && !allowed[header] {

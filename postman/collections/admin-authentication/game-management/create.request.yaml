@@ -1,0 +1,33 @@
+$kind: http-request
+name: Create Game
+order: 3000
+method: POST
+url: "{{baseUrl}}/api/admin/games/v1/create"
+headers:
+  Content-Type: application/json
+  Origin: "{{dashboardOrigin}}"
+  X-CSRF-Token: "{{csrfToken}}"
+body:
+  type: json
+  content: |-
+    {
+      "name": "Example Game 3",
+      "slug": "example-game-3",
+      "description": "Optional game description",
+      "imageUrl": "https://cdn.example.test/example-game.webp",
+      "platform": "MOBILE",
+      "isActive": true,
+      "isPopular": true
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Create returns HTTP 200', function () { pm.response.to.have.status(200); });
+      pm.test('Create returns success envelope', function () {
+        const body = pm.response.json();
+        pm.expect(body.code).to.eql('GAMS00000');
+        pm.expect(body).to.have.property('data', null);
+      });
+      pm.test('Response is not cached', function () { pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store'); });
+    language: text/javascript
+examples: ./.resources/create.resources/examples/

@@ -1,0 +1,31 @@
+$kind: http-example
+name: Logout succeeded
+order: 1000
+request:
+  method: POST
+  url: http://localhost:8080/api/admin/auth/v1/logout
+  headers:
+    - key: Origin
+      value: http://localhost:3000
+    - key: X-CSRF-Token
+      value: "{{csrfToken}}"
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+    - key: Set-Cookie
+      value: __Host-jokihub-admin-access=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=None
+    - key: Set-Cookie
+      value: __Host-jokihub-admin-refresh=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=None
+  body:
+    type: json
+    content: |-
+      {
+        "code": "ADMS00000",
+        "message": "Logout admin berhasil.",
+        "data": null
+      }

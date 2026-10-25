@@ -1,0 +1,22 @@
+$kind: http-example
+name: Update role
+order: 1000
+request:
+  method: PUT
+  url: http://localhost:8080/api/admin/roles/v1/update/role_01JXYZ
+  body:
+    type: json
+    content: |-
+      {"description":"Updated support access","permissions":["role.read","game.read"]}
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {"code":"ROLS00000","message":"Role updated","data":null}

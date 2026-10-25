@@ -1,0 +1,23 @@
+$kind: http-example
+name: Public list has no matching games
+order: 4000
+request:
+  method: GET
+  url: http://localhost:8080/api/games/v1/list?search=missing-game
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {
+        "code": "GAMS00000",
+        "message": "Games retrieved",
+        "data": [],
+        "pagination": {"page": 1, "limit": 20, "total": 0, "totalPages": 0}
+      }

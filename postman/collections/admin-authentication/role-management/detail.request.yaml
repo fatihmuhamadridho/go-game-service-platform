@@ -1,0 +1,23 @@
+$kind: http-request
+name: Role Detail
+order: 2000
+method: GET
+url: '{{baseUrl}}/api/admin/roles/v1/detail/{{roleId}}'
+headers:
+  - key: Origin
+    value: '{{dashboardOrigin}}'
+  - key: X-CSRF-Token
+    value: '{{csrfToken}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('Detail returns HTTP 200', function () { pm.response.to.have.status(200); });
+      pm.test('Detail includes permissions', function () {
+        const body = pm.response.json();
+        pm.expect(body.code).to.eql('ROLS00000');
+        pm.expect(body.data).to.include.keys('id', 'name', 'code', 'isSystem', 'permissions');
+        pm.expect(body.data.permissions).to.be.an('array');
+      });
+      pm.test('Response is not cached', function () { pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store'); });
+examples: './.resources/detail.resources/examples/'

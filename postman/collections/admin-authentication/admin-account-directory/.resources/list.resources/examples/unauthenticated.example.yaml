@@ -1,0 +1,18 @@
+$kind: http-example
+name: Admin account session missing
+order: 6000
+request:
+  method: GET
+  url: http://localhost:8080/api/admin/admin-users/v1/list?page=1&limit=20
+response:
+  statusCode: 401
+  statusText: Unauthorized
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {"code":"USRB01001","message":"Sesi admin tidak tersedia atau tidak valid.","data":null}

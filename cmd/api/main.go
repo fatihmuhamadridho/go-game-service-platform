@@ -10,9 +10,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fatihmuhamadridho/go-game-service-platform/internal/adminaccount"
 	"github.com/fatihmuhamadridho/go-game-service-platform/internal/auth"
 	"github.com/fatihmuhamadridho/go-game-service-platform/internal/config"
+	"github.com/fatihmuhamadridho/go-game-service-platform/internal/game"
 	"github.com/fatihmuhamadridho/go-game-service-platform/internal/platform/database"
+	"github.com/fatihmuhamadridho/go-game-service-platform/internal/publicgame"
+	"github.com/fatihmuhamadridho/go-game-service-platform/internal/role"
 	"github.com/joho/godotenv"
 )
 
@@ -46,10 +50,24 @@ func main() {
 	}()
 	database := client.Database(cfg.MongoDatabase)
 	adminModel := auth.NewMongoAdminAuthRepository(database)
+	gameModel := game.NewMongoGameRepository(database)
+	publicGameModel := publicgame.NewMongoRepository(database)
+	adminAccountModel := adminaccount.NewMongoRepository(database)
+	roleModel := role.NewMongoRepository(database)
 	indexCtx, stop := context.WithTimeout(ctx, 20*time.Second)
 	if err := adminModel.EnsureIndexes(indexCtx); err != nil {
 		stop()
 		logger.Error("MongoDB index setup failed", "error", err.Error())
+		os.Exit(1)
+	}
+	if err := gameModel.EnsureIndexes(indexCtx); err != nil {
+		stop()
+		logger.Error("MongoDB game index setup failed", "error", err.Error())
+		os.Exit(1)
+	}
+	if err := publicGameModel.EnsureIndexes(indexCtx); err != nil {
+		stop()
+		logger.Error("MongoDB public game index setup failed", "error", err.Error())
 		os.Exit(1)
 	}
 	stop()
@@ -59,6 +77,14 @@ func main() {
 	handler := auth.NewAdminAuthHandler(service, adminModel, tokenManager, cfg.Origins, cfg.TrustedProxyCIDRs, logger, cfg.AllowInsecureHTTP)
 	mux := http.NewServeMux()
 	handler.Register(mux)
+	gameHandler := game.NewAdminGameHandler(&game.GameService{Data: gameModel}, handler, cfg.TrustedProxyCIDRs)
+	gameHandler.Register(mux)
+	roleHandler := role.NewAdminRoleHandler(&role.Service{Data: roleModel}, adminModel, handler, cfg.TrustedProxyCIDRs)
+	roleHandler.Register(mux)
+	adminAccountHandler := adminaccount.NewAdminAccountHandler(&adminaccount.Service{Data: adminAccountModel}, adminModel, handler, cfg.TrustedProxyCIDRs)
+	adminAccountHandler.Register(mux)
+	publicGameHandler := publicgame.NewHandler(&publicgame.Service{Data: publicGameModel}, cfg.TrustedProxyCIDRs)
+	publicGameHandler.Register(mux)
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           handler.CORS(auth.RequestLogging(logger, mux)),
@@ -76,7 +102,7 @@ func main() {
 		}
 	}()
 
-	logger.Info("admin auth service starting", "address", server.Addr)
+	logger.Info("admin api service starting", "address", server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logger.Error("HTTP server stopped", "error", err.Error())
 		os.Exit(1)

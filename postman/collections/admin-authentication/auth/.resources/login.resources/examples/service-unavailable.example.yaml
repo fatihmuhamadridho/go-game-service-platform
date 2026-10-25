@@ -1,0 +1,34 @@
+$kind: http-example
+name: Authentication service unavailable
+order: 3000
+request:
+  method: POST
+  url: http://localhost:8080/api/admin/auth/v1/login
+  headers:
+    - key: Origin
+      value: http://localhost:3000
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "identifier": "{{identifier}}",
+        "password": "{{password}}"
+      }
+response:
+  statusCode: 500
+  statusText: Internal Server Error
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {
+        "code": "ADMT03001",
+        "message": "Layanan autentikasi sedang tidak tersedia.",
+        "data": null
+      }

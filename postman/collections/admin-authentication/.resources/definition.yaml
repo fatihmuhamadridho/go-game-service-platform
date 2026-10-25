@@ -1,0 +1,7 @@
+$kind: collection
+name: Game Service Platform - Admin API
+description: Admin auth, game and role management, admin account directory, and public game catalog requests for the local API.
+auth:
+  type: noauth
+variables:
+  csrfToken: ""

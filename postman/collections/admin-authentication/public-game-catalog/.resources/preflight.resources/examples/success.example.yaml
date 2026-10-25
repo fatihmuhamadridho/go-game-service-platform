@@ -1,0 +1,26 @@
+$kind: http-example
+name: Public catalog GET preflight accepted
+order: 1000
+request:
+  method: OPTIONS
+  url: http://localhost:8080/api/games/v1/list
+  headers:
+    - key: Origin
+      value: https://storefront.example.test
+    - key: Access-Control-Request-Method
+      value: GET
+    - key: Access-Control-Request-Headers
+      value: x-request-id
+response:
+  statusCode: 204
+  statusText: No Content
+  headers:
+    - key: Access-Control-Allow-Origin
+      value: '*'
+    - key: Access-Control-Allow-Methods
+      value: 'GET, OPTIONS'
+    - key: Access-Control-Allow-Headers
+      value: X-Request-Id
+  body:
+    type: text
+    content: ''

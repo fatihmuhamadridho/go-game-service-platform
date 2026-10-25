@@ -1,0 +1,27 @@
+$kind: http-request
+name: List Popular Games
+order: 2000
+method: GET
+url: '{{baseUrl}}/api/games/v1/popular?page=1&limit=6'
+queryParams:
+  - key: page
+    value: '1'
+  - key: limit
+    value: '6'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('Popular games returns HTTP 200', function () { pm.response.to.have.status(200); });
+      pm.test('Popular games returns active catalog projection', function () {
+        const body = pm.response.json();
+        pm.expect(body.code).to.eql('GAMS00000');
+        pm.expect(body.data).to.be.an('array');
+        pm.expect(body.pagination).to.include.keys('page', 'limit', 'total', 'totalPages');
+        for (const game of body.data) {
+          pm.expect(game).to.include.keys('id', 'name', 'slug', 'imageUrl', 'sortOrder');
+          pm.expect(game.imageUrl).to.match(/^https:\/\//);
+          pm.expect(game).not.to.have.any.keys('createdAt', 'updatedAt', 'deletedAt', 'rating', 'reviewCount');
+        }
+      });
+examples: './.resources/popular.resources/examples/'

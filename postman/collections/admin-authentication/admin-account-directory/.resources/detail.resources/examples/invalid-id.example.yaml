@@ -1,0 +1,22 @@
+$kind: http-example
+name: Invalid admin account id
+order: 2000
+request:
+  method: GET
+  url: http://localhost:8080/api/admin/admin-users/v1/detail/not-an-admin-id
+response:
+  statusCode: 400
+  statusText: Bad Request
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {
+        "code": "USRB02001",
+        "message": "Filter admin tidak valid.",
+        "data": null
+      }

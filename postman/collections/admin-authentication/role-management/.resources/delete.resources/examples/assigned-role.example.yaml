@@ -1,0 +1,18 @@
+$kind: http-example
+name: Role assigned to an active admin
+order: 2000
+request:
+  method: DELETE
+  url: http://localhost:8080/api/admin/roles/v1/delete/role_01JXYZ
+response:
+  statusCode: 409
+  statusText: Conflict
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {"code":"ROLB02006","message":"Role masih ditugaskan ke akun aktif.","data":null}

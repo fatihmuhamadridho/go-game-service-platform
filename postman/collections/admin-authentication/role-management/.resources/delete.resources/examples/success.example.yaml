@@ -1,0 +1,18 @@
+$kind: http-example
+name: Delete role
+order: 1000
+request:
+  method: DELETE
+  url: http://localhost:8080/api/admin/roles/v1/delete/role_01JXYZ
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {"code":"ROLS00000","message":"Role deleted","data":null}

@@ -1,0 +1,22 @@
+$kind: http-request
+name: Delete Role
+order: 5000
+method: DELETE
+url: '{{baseUrl}}/api/admin/roles/v1/delete/{{roleId}}'
+headers:
+  - key: Origin
+    value: '{{dashboardOrigin}}'
+  - key: X-CSRF-Token
+    value: '{{csrfToken}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('Delete returns HTTP 200', function () { pm.response.to.have.status(200); });
+      pm.test('Delete returns success envelope', function () {
+        const body = pm.response.json();
+        pm.expect(body.code).to.eql('ROLS00000');
+        pm.expect(body).to.have.property('data', null);
+      });
+      pm.test('Response is not cached', function () { pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store'); });
+examples: './.resources/delete.resources/examples/'

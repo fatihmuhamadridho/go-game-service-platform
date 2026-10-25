@@ -1,0 +1,28 @@
+$kind: http-example
+name: Admin account GET preflight accepted
+order: 1000
+request:
+  method: OPTIONS
+  url: http://localhost:8080/api/admin/admin-users/v1/list
+  headers:
+    - key: Origin
+      value: http://localhost:8080
+    - key: Access-Control-Request-Method
+      value: GET
+    - key: Access-Control-Request-Headers
+      value: x-csrf-token
+response:
+  statusCode: 204
+  statusText: No Content
+  headers:
+    - key: Access-Control-Allow-Origin
+      value: http://localhost:8080
+    - key: Access-Control-Allow-Credentials
+      value: 'true'
+    - key: Access-Control-Allow-Methods
+      value: 'GET, OPTIONS'
+    - key: Access-Control-Allow-Headers
+      value: 'Content-Type, X-CSRF-Token, X-Request-Id'
+  body:
+    type: text
+    content: ''

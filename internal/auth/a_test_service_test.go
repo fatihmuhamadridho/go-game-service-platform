@@ -12,6 +12,8 @@ import (
 
 type testModelData struct {
 	identity       LoginIdentity
+	findField      string
+	findIdentifier string
 	findErr        error
 	session        Session
 	createErr      error
@@ -24,7 +26,9 @@ type testModelData struct {
 	revokedFamily  string
 }
 
-func (r *testModelData) FindLoginIdentity(context.Context, string, string) (LoginIdentity, error) {
+func (r *testModelData) FindLoginIdentity(_ context.Context, field, identifier string) (LoginIdentity, error) {
+	r.findField = field
+	r.findIdentifier = identifier
 	return r.identity, r.findErr
 }
 func (r *testModelData) CreateLoginSession(_ context.Context, _ string, session Session) (AdminProfile, error) {
@@ -122,6 +126,9 @@ func TestLoginIssuesSessionForTrimmedEmailLookup(t *testing.T) {
 	if issued.AccessToken != "access-token" || issued.Profile.ID != "admin_1" {
 		t.Fatalf("unexpected issued session: %#v", issued)
 	}
+	if dataModel.findField != "email" || dataModel.findIdentifier != "OPS@EXAMPLE.TEST" {
+		t.Fatalf("trimmed email lookup mismatch: field=%q identifier=%q", dataModel.findField, dataModel.findIdentifier)
+	}
 	if dataModel.session.AdminAccountID != "admin_1" || dataModel.session.RefreshTokenDigest == "" || dataModel.session.CSRFTokenDigest == "" {
 		t.Fatalf("session digests were not persisted: %#v", dataModel.session)
 	}
@@ -130,6 +137,17 @@ func TestLoginIssuesSessionForTrimmedEmailLookup(t *testing.T) {
 	}
 	if limiter.checks != 1 || len(limiter.allows) != 0 {
 		t.Fatalf("unexpected identifier throttle flow: %#v, checks %d", limiter.allows, limiter.checks)
+	}
+}
+
+func TestLoginUsesTrimmedUsernameLookupWhenIdentifierHasNoAtSign(t *testing.T) {
+	dataModel := &testModelData{identity: LoginIdentity{Profile: AdminProfile{ID: "admin_1"}, Credential: Credential{Hash: "argon-hash"}}}
+	service := newTestService(dataModel, &testLimiter{}, testPasswordVerifier{valid: true})
+	if _, err := service.Login(context.Background(), "  Ops.User  ", "secret"); err != nil {
+		t.Fatal(err)
+	}
+	if dataModel.findField != "username" || dataModel.findIdentifier != "Ops.User" {
+		t.Fatalf("trimmed username lookup mismatch: field=%q identifier=%q", dataModel.findField, dataModel.findIdentifier)
 	}
 }
 
@@ -223,6 +241,47 @@ func TestRefreshRejectsInvalidCSRFBeforeRotation(t *testing.T) {
 	var typed *ServiceError
 	if !errors.As(err, &typed) || typed.HTTPStatus != 403 || dataModel.rotatedCalls != 0 {
 		t.Fatalf("invalid CSRF did not stop rotation: err=%v calls=%d", err, dataModel.rotatedCalls)
+	}
+}
+
+func TestRefreshRejectsExpiredAndRevokedGenerationsWithoutReturningTokens(t *testing.T) {
+	now := time.Date(2026, 10, 24, 0, 0, 0, 0, time.UTC)
+	for _, test := range []struct {
+		name    string
+		session Session
+	}{
+		{name: "expired", session: Session{ID: "session_old", FamilyID: "family_1", CSRFTokenDigest: utils.DigestToken("csrf"), ExpiresAt: now}},
+		{name: "revoked", session: Session{ID: "session_old", FamilyID: "family_1", CSRFTokenDigest: utils.DigestToken("csrf"), ExpiresAt: now.Add(time.Hour), RevokedAt: &now}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dataModel := &testModelData{refreshSession: test.session, refreshResult: RefreshResult{Valid: false}}
+			service := newTestService(dataModel, &testLimiter{}, testPasswordVerifier{})
+			issued, err := service.Refresh(context.Background(), "refresh-token", "csrf")
+			var typed *ServiceError
+			if !errors.As(err, &typed) || typed.HTTPStatus != 401 || typed.Code != "ADMB01003" {
+				t.Fatalf("expected generic invalid-session response, got %v", err)
+			}
+			if dataModel.rotatedCalls != 1 || issued.AccessToken != "" || issued.RefreshToken != "" || issued.CSRFToken != "" {
+				t.Fatalf("invalid generation produced tokens or skipped validation: issued=%#v calls=%d", issued, dataModel.rotatedCalls)
+			}
+		})
+	}
+}
+
+func TestRefreshStoreFailureReturnsTechnicalErrorWithoutSessionTokens(t *testing.T) {
+	now := time.Date(2026, 10, 24, 0, 0, 0, 0, time.UTC)
+	dataModel := &testModelData{
+		refreshSession: Session{ID: "session_old", FamilyID: "family_1", CSRFTokenDigest: utils.DigestToken("csrf"), ExpiresAt: now.Add(time.Hour)},
+		replayErr:      errors.New("store unavailable"),
+	}
+	service := newTestService(dataModel, &testLimiter{}, testPasswordVerifier{})
+	issued, err := service.Refresh(context.Background(), "refresh-token", "csrf")
+	var typed *ServiceError
+	if !errors.As(err, &typed) || typed.HTTPStatus != 500 || typed.Code != "ADMT03001" {
+		t.Fatalf("expected technical store error, got %v", err)
+	}
+	if issued.AccessToken != "" || issued.RefreshToken != "" || issued.CSRFToken != "" {
+		t.Fatalf("store error returned session tokens: %#v", issued)
 	}
 }
 

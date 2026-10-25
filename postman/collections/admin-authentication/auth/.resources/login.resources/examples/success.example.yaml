@@ -1,0 +1,51 @@
+$kind: http-example
+name: Login succeeded
+order: 1000
+request:
+  method: POST
+  url: http://localhost:8080/api/admin/auth/v1/login
+  headers:
+    - key: Origin
+      value: http://localhost:3000
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "identifier": "{{identifier}}",
+        "password": "{{password}}"
+      }
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+    - key: Set-Cookie
+      value: __Host-jokihub-admin-access=<redacted>; Max-Age=900; Path=/; HttpOnly; Secure; SameSite=None
+    - key: Set-Cookie
+      value: __Host-jokihub-admin-refresh=<redacted>; Max-Age=604800; Path=/; HttpOnly; Secure; SameSite=None
+  body:
+    type: json
+    content: |-
+      {
+        "code": "ADMS00000",
+        "message": "Login admin berhasil.",
+        "data": {
+          "id": "admin_01JXYZ",
+          "username": "support.ops",
+          "name": "Support Admin",
+          "email": "support@example.test",
+          "role": {
+            "id": "role_super_admin",
+            "name": "Super Admin",
+            "code": "SUPER_ADMIN",
+            "system": true
+          },
+          "csrfToken": "<redacted-csrf-token>",
+          "accessExpiresIn": 900
+        }
+      }

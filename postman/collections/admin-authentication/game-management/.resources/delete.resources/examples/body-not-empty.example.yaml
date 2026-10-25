@@ -1,0 +1,22 @@
+$kind: http-example
+name: DELETE request body is not allowed
+order: 2000
+request:
+  method: DELETE
+  url: http://localhost:8080/api/admin/games/v1/delete/game_01ARZ3NDEKTSV4RRFFQ69G5FAV
+  body:
+    type: json
+    content: |-
+      {"force":true}
+response:
+  statusCode: 400
+  statusText: Bad Request
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {"code":"GAMB02001","message":"Invalid game request parameters.","data":null}

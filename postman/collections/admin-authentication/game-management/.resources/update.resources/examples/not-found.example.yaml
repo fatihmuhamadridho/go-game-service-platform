@@ -1,0 +1,22 @@
+$kind: http-example
+name: Game to update not found
+order: 2000
+request:
+  method: PATCH
+  url: http://localhost:8080/api/admin/games/v1/update/game_01ARZ3NDEKTSV4RRFFQ69G5FAV
+  body:
+    type: json
+    content: |-
+      {"description":"Updated description"}
+response:
+  statusCode: 404
+  statusText: Not Found
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {"code":"GAMB02004","message":"Game not found.","data":null}

@@ -83,14 +83,26 @@ type sessionDocument struct {
 }
 
 func (r *MongoAdminAuthRepository) EnsureIndexes(ctx context.Context) error {
-	indexes := []struct {
-		collection string
-		models     []mongo.IndexModel
-	}{
+	for _, index := range authIndexModels() {
+		if _, err := r.database.Collection(index.collection).Indexes().CreateMany(ctx, index.models); err != nil {
+			return fmt.Errorf("create %s indexes: %w", index.collection, err)
+		}
+	}
+	return nil
+}
+
+type collectionIndexModels struct {
+	collection string
+	models     []mongo.IndexModel
+}
+
+func authIndexModels() []collectionIndexModels {
+	return []collectionIndexModels{
 		{adminAccounts, []mongo.IndexModel{
 			{Keys: bson.D{{Key: "admin_account_id", Value: 1}}, Options: options.Index().SetName("uq_admin_account_id").SetUnique(true)},
 			{Keys: bson.D{{Key: "username", Value: 1}}, Options: options.Index().SetName("uq_admin_account_username_ci").SetUnique(true).SetCollation(&options.Collation{Locale: "en", Strength: 2})},
 			{Keys: bson.D{{Key: "email", Value: 1}}, Options: options.Index().SetName("uq_admin_account_email_ci").SetUnique(true).SetCollation(&options.Collation{Locale: "en", Strength: 2})},
+			{Keys: bson.D{{Key: "status", Value: 1}, {Key: "username", Value: 1}, {Key: "admin_account_id", Value: 1}}, Options: options.Index().SetName("ix_admin_account_list").SetPartialFilterExpression(bson.D{{Key: "deleted_at", Value: nil}})},
 		}},
 		{credentials, []mongo.IndexModel{
 			{Keys: bson.D{{Key: "credential_id", Value: 1}}, Options: options.Index().SetName("uq_admin_credential_id").SetUnique(true)},
@@ -110,21 +122,18 @@ func (r *MongoAdminAuthRepository) EnsureIndexes(ctx context.Context) error {
 		}},
 		{adminRoles, []mongo.IndexModel{
 			{Keys: bson.D{{Key: "role_id", Value: 1}}, Options: options.Index().SetName("uq_admin_role_id").SetUnique(true)},
+			{Keys: bson.D{{Key: "name", Value: 1}}, Options: options.Index().SetName("uq_admin_role_name_active").SetUnique(true).SetCollation(&options.Collation{Locale: "en", Strength: 2}).SetPartialFilterExpression(bson.D{{Key: "deleted_at", Value: nil}})},
 			{Keys: bson.D{{Key: "code", Value: 1}}, Options: options.Index().SetName("uq_admin_role_code_active").SetUnique(true).SetPartialFilterExpression(bson.D{{Key: "deleted_at", Value: nil}})},
+			{Keys: bson.D{{Key: "status", Value: 1}, {Key: "name", Value: 1}, {Key: "role_id", Value: 1}}, Options: options.Index().SetName("ix_admin_role_list").SetPartialFilterExpression(bson.D{{Key: "deleted_at", Value: nil}})},
 		}},
 		{rolePermission, []mongo.IndexModel{{Keys: bson.D{{Key: "role_id", Value: 1}, {Key: "permission_id", Value: 1}}, Options: options.Index().SetName("uq_role_permission_pair").SetUnique(true)}}},
 		{permissions, []mongo.IndexModel{
 			{Keys: bson.D{{Key: "permission_id", Value: 1}}, Options: options.Index().SetName("uq_permission_id").SetUnique(true)},
 			{Keys: bson.D{{Key: "permission_key", Value: 1}}, Options: options.Index().SetName("uq_permission_key").SetUnique(true)},
+			{Keys: bson.D{{Key: "is_active", Value: 1}, {Key: "permission_key", Value: 1}}, Options: options.Index().SetName("ix_permission_active_key")},
 		}},
 		{rateWindows, []mongo.IndexModel{{Keys: bson.D{{Key: "expires_at", Value: 1}}, Options: options.Index().SetName("ttl_rate_limit_expiry").SetExpireAfterSeconds(0)}}},
 	}
-	for _, index := range indexes {
-		if _, err := r.database.Collection(index.collection).Indexes().CreateMany(ctx, index.models); err != nil {
-			return fmt.Errorf("create %s indexes: %w", index.collection, err)
-		}
-	}
-	return nil
 }
 
 func (r *MongoAdminAuthRepository) FindLoginIdentity(ctx context.Context, field, identifier string) (LoginIdentity, error) {
@@ -185,20 +194,6 @@ func (r *MongoAdminAuthRepository) resolveProfile(ctx context.Context, accountID
 	}
 	profile := AdminProfile{ID: account.ID, Username: account.Username, Name: account.Name, Email: account.Email,
 		Role: Role{ID: role.ID, Name: role.Name, Code: role.Code, System: role.System}}
-	if profile.Role.Code == "SUPER_ADMIN" && profile.Role.System {
-		cursor, err := r.database.Collection(permissions).Find(ctx, bson.D{{Key: "is_active", Value: true}})
-		if err != nil {
-			return AdminProfile{}, err
-		}
-		var active []permissionDocument
-		if err := cursor.All(ctx, &active); err != nil {
-			return AdminProfile{}, err
-		}
-		for _, permission := range active {
-			profile.Perms = append(profile.Perms, permission.Key)
-		}
-		return profile, nil
-	}
 	links, err := r.database.Collection(rolePermission).Find(ctx, bson.D{{Key: "role_id", Value: role.ID}})
 	if err != nil {
 		return AdminProfile{}, err
@@ -437,8 +432,12 @@ type rateWindowDocument struct {
 }
 
 func (r *MongoAdminAuthRepository) Allow(ctx context.Context, key string, limit int, now time.Time) (time.Duration, bool, error) {
+	return r.AllowWindow(ctx, key, limit, RateWindow, now)
+}
+
+func (r *MongoAdminAuthRepository) AllowWindow(ctx context.Context, key string, limit int, window time.Duration, now time.Time) (time.Duration, bool, error) {
 	collection := r.database.Collection(rateWindows)
-	_, err := collection.UpdateOne(ctx, bson.D{{Key: "_id", Value: key}}, bson.D{{Key: "$setOnInsert", Value: bson.D{{Key: "events", Value: bson.A{}}, {Key: "expires_at", Value: now.Add(RateWindow)}}}}, options.UpdateOne().SetUpsert(true))
+	_, err := collection.UpdateOne(ctx, bson.D{{Key: "_id", Value: key}}, bson.D{{Key: "$setOnInsert", Value: bson.D{{Key: "events", Value: bson.A{}}, {Key: "expires_at", Value: now.Add(window)}}}}, options.UpdateOne().SetUpsert(true))
 	if err != nil {
 		var writeError mongo.WriteException
 		var commandError mongo.CommandError
@@ -448,12 +447,12 @@ func (r *MongoAdminAuthRepository) Allow(ctx context.Context, key string, limit 
 			return 0, false, err
 		}
 	}
-	start := now.Add(-RateWindow)
+	start := now.Add(-window)
 	filtered := bson.D{{Key: "$filter", Value: bson.D{{Key: "input", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$events", bson.A{}}}}}, {Key: "as", Value: "event"}, {Key: "cond", Value: bson.D{{Key: "$gt", Value: bson.A{"$$event", start}}}}}}}
 	filter := bson.D{{Key: "_id", Value: key}, {Key: "$expr", Value: bson.D{{Key: "$lt", Value: bson.A{bson.D{{Key: "$size", Value: filtered}}, limit}}}}}
 	pipeline := mongo.Pipeline{{{Key: "$set", Value: bson.D{
 		{Key: "events", Value: bson.D{{Key: "$concatArrays", Value: bson.A{filtered, bson.A{now}}}}},
-		{Key: "expires_at", Value: now.Add(RateWindow)},
+		{Key: "expires_at", Value: now.Add(window)},
 	}}}}
 	var result rateWindowDocument
 	err = collection.FindOneAndUpdate(ctx, filter, pipeline, options.FindOneAndUpdate().SetReturnDocument(options.After)).Decode(&result)
@@ -473,7 +472,7 @@ func (r *MongoAdminAuthRepository) Allow(ctx context.Context, key string, limit 
 			oldest = event
 		}
 	}
-	retry := oldest.Add(RateWindow).Sub(now)
+	retry := oldest.Add(window).Sub(now)
 	if retry < time.Second {
 		retry = time.Second
 	}

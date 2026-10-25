@@ -1,0 +1,37 @@
+$kind: http-request
+name: List Public Games
+order: 1000
+method: GET
+url: '{{baseUrl}}/api/games/v1/list?search=&sort=SORT_ORDER_ASC&page=1&limit=20'
+queryParams:
+  - key: search
+    value: ''
+    description: Optional case-insensitive name or slug search; maximum 100 characters.
+  - key: platform
+    value: MOBILE
+    description: 'Optional platform filter: MOBILE, PC, or CONSOLE.'
+    disabled: true
+  - key: sort
+    value: SORT_ORDER_ASC
+    description: SORT_ORDER_ASC, POPULAR, or NAME_ASC.
+  - key: page
+    value: '1'
+  - key: limit
+    value: '20'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('Public list returns HTTP 200', function () { pm.response.to.have.status(200); });
+      pm.test('Public list returns safe data and pagination', function () {
+        const body = pm.response.json();
+        pm.expect(body.code).to.eql('GAMS00000');
+        pm.expect(body.data).to.be.an('array');
+        pm.expect(body.pagination).to.include.keys('page', 'limit', 'total', 'totalPages');
+        for (const game of body.data) {
+          pm.expect(game).to.include.keys('id', 'name', 'slug', 'imageUrl');
+          pm.expect(game.imageUrl).to.match(/^https:\/\//);
+          pm.expect(game).not.to.have.any.keys('createdAt', 'updatedAt', 'deletedAt', 'rating', 'reviewCount');
+        }
+      });
+examples: './.resources/list.resources/examples/'

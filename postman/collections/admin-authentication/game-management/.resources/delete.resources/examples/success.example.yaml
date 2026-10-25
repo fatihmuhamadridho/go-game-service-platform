@@ -1,0 +1,22 @@
+$kind: http-example
+name: Soft-delete game
+order: 1000
+request:
+  method: DELETE
+  url: http://localhost:8080/api/admin/games/v1/delete/game_01ARZ3NDEKTSV4RRFFQ69G5FAV
+response:
+  statusCode: 200
+  statusText: OK
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {
+        "code": "GAMS00000",
+        "message": "Game deleted",
+        "data": null
+      }

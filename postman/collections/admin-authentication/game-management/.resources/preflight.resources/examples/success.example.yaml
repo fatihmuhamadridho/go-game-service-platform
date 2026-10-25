@@ -1,0 +1,28 @@
+$kind: http-example
+name: Game PATCH preflight accepted
+order: 1000
+request:
+  method: OPTIONS
+  url: http://localhost:8080/api/admin/games/v1/update/game_01ARZ3NDEKTSV4RRFFQ69G5FAV
+  headers:
+    - key: Origin
+      value: http://localhost:8080
+    - key: Access-Control-Request-Method
+      value: PATCH
+    - key: Access-Control-Request-Headers
+      value: content-type, x-csrf-token
+response:
+  statusCode: 204
+  statusText: No Content
+  headers:
+    - key: Access-Control-Allow-Origin
+      value: http://localhost:8080
+    - key: Access-Control-Allow-Credentials
+      value: 'true'
+    - key: Access-Control-Allow-Methods
+      value: 'GET, POST, PATCH, DELETE, OPTIONS'
+    - key: Access-Control-Allow-Headers
+      value: 'Content-Type, X-CSRF-Token, X-Request-Id'
+  body:
+    type: text
+    content: ''

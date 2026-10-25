@@ -1,0 +1,24 @@
+$kind: http-request
+name: Delete Game
+order: 5000
+method: DELETE
+url: '{{baseUrl}}/api/admin/games/v1/delete/{{gameId}}'
+headers:
+  - key: Origin
+    value: '{{dashboardOrigin}}'
+  - key: X-CSRF-Token
+    value: '{{csrfToken}}'
+body:
+  type: none
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('Delete returns HTTP 200', function () { pm.response.to.have.status(200); });
+      pm.test('Delete returns success envelope', function () {
+        const body = pm.response.json();
+        pm.expect(body.code).to.eql('GAMS00000');
+        pm.expect(body).to.have.property('data', null);
+      });
+      pm.test('Response is not cached', function () { pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store'); });
+examples: './.resources/delete.resources/examples/'

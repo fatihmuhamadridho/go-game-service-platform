@@ -1,0 +1,27 @@
+$kind: http-example
+name: CSRF token is invalid
+order: 3000
+request:
+  method: POST
+  url: http://localhost:8080/api/admin/auth/v1/refresh-token
+  headers:
+    - key: Origin
+      value: http://localhost:3000
+    - key: X-CSRF-Token
+      value: "{{csrfToken}}"
+response:
+  statusCode: 403
+  statusText: Forbidden
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {
+        "code": "ADMB01004",
+        "message": "CSRF token tidak valid.",
+        "data": null
+      }

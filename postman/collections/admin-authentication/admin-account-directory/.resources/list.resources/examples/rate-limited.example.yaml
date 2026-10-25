@@ -1,0 +1,24 @@
+$kind: http-example
+name: Admin account read rate limited
+order: 4000
+request:
+  method: GET
+  url: http://localhost:8080/api/admin/admin-users/v1/list?page=1&limit=20
+response:
+  statusCode: 429
+  statusText: Too Many Requests
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+    - key: Retry-After
+      value: '60'
+  body:
+    type: json
+    content: |-
+      {
+        "code": "USRB02007",
+        "message": "Batas request admin tercapai.",
+        "data": null
+      }

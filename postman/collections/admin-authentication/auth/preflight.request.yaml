@@ -1,0 +1,23 @@
+$kind: http-request
+name: Preflight Admin Auth
+order: 4000
+method: OPTIONS
+url: '{{baseUrl}}/api/admin/auth/v1/login'
+headers:
+  - key: Origin
+    value: '{{dashboardOrigin}}'
+  - key: Access-Control-Request-Method
+    value: POST
+  - key: Access-Control-Request-Headers
+    value: content-type, x-request-id
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('Admin preflight is accepted', function () { pm.response.to.have.status(204); });
+      pm.test('Admin preflight allows credentialed dashboard requests', function () {
+        pm.expect(pm.response.headers.get('Access-Control-Allow-Origin')).to.eql(pm.environment.get('dashboardOrigin'));
+        pm.expect(pm.response.headers.get('Access-Control-Allow-Credentials')).to.eql('true');
+        pm.expect(pm.response.headers.get('Access-Control-Allow-Methods')).to.include('POST');
+      });
+examples: './.resources/preflight.resources/examples/'

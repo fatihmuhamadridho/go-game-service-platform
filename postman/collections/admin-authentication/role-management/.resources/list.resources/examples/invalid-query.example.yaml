@@ -1,0 +1,18 @@
+$kind: http-example
+name: Invalid role list query
+order: 2000
+request:
+  method: GET
+  url: http://localhost:8080/api/admin/roles/v1/list?limit=1000
+response:
+  statusCode: 400
+  statusText: Bad Request
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {"code":"ROLB02001","message":"Parameter role tidak valid.","data":null}

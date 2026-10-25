@@ -1,0 +1,5 @@
+workspace:
+  id: 2660a38b-6fbd-4137-9c5d-0c5f78a42579
+cloudResources:
+  collections:
+    ../postman/collections/admin-authentication: 28689665-e1872af1-5693-4f1f-aa55-d39fc3c8fd7c

@@ -1,0 +1,18 @@
+$kind: http-example
+name: Invalid public list query
+order: 2000
+request:
+  method: GET
+  url: http://localhost:8080/api/games/v1/list?platform=ARCADE
+response:
+  statusCode: 400
+  statusText: Bad Request
+  headers:
+    - key: Content-Type
+      value: application/json; charset=utf-8
+    - key: Cache-Control
+      value: no-store
+  body:
+    type: json
+    content: |-
+      {"code":"GAMB02001","message":"Invalid game-list query parameters","data":null}

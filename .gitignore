@@ -3,4 +3,15 @@
 /.env.*.local
 .env*
 !.env.example
+
+# Postman local overrides, secrets, and generated run output.
+/postman/environments/*.private.environment.yaml
+/postman/environments/*.local.environment.yaml
+/postman/**/.local/
+/postman/.cache/
+/postman/.tmp/
+/postman/reports/
+/postman/run-results/
+/postman/**/secrets.*
+/postman/**/*.secret.*
 tmp

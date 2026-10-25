@@ -1,0 +1,4 @@
+$kind: collection
+name: Game Management
+description: Admin game catalog operations. Run Login first; this folder shares its cookies and csrfToken variable.
+order: 2000

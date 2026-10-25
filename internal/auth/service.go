@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"crypto/subtle"
 	"errors"
 	"fmt"
 	"strings"
@@ -169,7 +168,14 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken, csrfToken strin
 		}
 		return RefreshedSession{}, serviceError("ADMT03001", 500, err)
 	}
-	if !constantStringEqual(old.CSRFTokenDigest, utils.DigestToken(csrfToken)) {
+	if old.RevokedAt != nil || !old.ExpiresAt.After(now) {
+		return RefreshedSession{}, serviceError("ADMB01003", 401, ErrInvalidSession)
+	}
+	csrfValid, err := s.Data.ValidateCSRF(ctx, old.FamilyID, utils.DigestToken(csrfToken))
+	if err != nil {
+		return RefreshedSession{}, serviceError("ADMT03001", 500, err)
+	}
+	if !csrfValid {
 		return RefreshedSession{}, serviceError("ADMB01004", 403, errors.New("invalid csrf token"))
 	}
 	newRefresh, err := s.Tokens.NewOpaqueToken()
@@ -213,10 +219,6 @@ func (s *AuthService) Logout(ctx context.Context, familyID string) error {
 		return serviceError("ADMT03001", 500, err)
 	}
 	return nil
-}
-
-func constantStringEqual(left, right string) bool {
-	return len(left) == len(right) && subtle.ConstantTimeCompare([]byte(left), []byte(right)) == 1
 }
 
 func NormalizeIdentifier(identifier string) string {
