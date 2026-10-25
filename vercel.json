@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/:path*",
-      "destination": "/api?__vercel_path=/:path*"
+      "destination": "/go?__vercel_path=/:path*"
     }
   ]
 }
