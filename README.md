@@ -28,6 +28,22 @@ Endpoints:
 - `GET /api/games/v1/list`
 - `GET /api/games/v1/popular`
 
+## Deploy to Vercel
+
+This repository exposes the existing Go HTTP router through a Vercel Go Function in `api/index.go`. `vercel.json` forwards incoming paths to that function, which dispatches the original API paths. The Go runtime is currently in Beta on Vercel. Set this repository as the Vercel project's root directory so Vercel detects the root `go.mod`, `api/`, and `vercel.json`.
+
+Add these environment variables in Vercel Project Settings for each environment you deploy:
+
+- `MONGODB_URL`: MongoDB Atlas or another externally reachable replica-set URI. The API uses transactions, so a standalone MongoDB server is insufficient.
+- `MONGODB_DATABASE`: database name if the URI does not include one.
+- `JWT_SECRET`: a unique random secret of at least 32 bytes.
+- `CORS_ALLOWED_ORIGINS`: exact browser dashboard origins, comma-separated, such as `https://admin.example.com,https://admin-git-preview-example.vercel.app`. Add the production and preview dashboard origins to their matching Vercel environments.
+- `JWT_ISSUER` and `JWT_AUDIENCE`: optional; defaults are `jokihub-admin-api` and `jokihub-admin-dashboard`.
+- `AUTH_ALLOW_INSECURE_HTTP`: set to `false` in Vercel.
+- `TRUSTED_PROXY_CIDRS`: leave blank for direct Vercel hosting. The API recognizes Vercel's platform-provided client-IP and HTTPS forwarding headers when `VERCEL=1` is present.
+
+Allow the Vercel deployment to connect to MongoDB in your database network settings. Ensure Vercel exposes its system environment variables so `VERCEL=1` is available at function runtime. After deployment, call the same paths listed above on your Vercel domain, for example `https://<deployment-domain>/api/admin/auth/v1/login`. Set the dashboard's API base URL to that domain and include the dashboard's exact origin in `CORS_ALLOWED_ORIGINS`.
+
 The service creates required indexes at startup. Production requires HTTPS because auth cookies are `Secure` and use the `__Host-` prefix. Local-only `AUTH_ALLOW_INSECURE_HTTP=true` permits non-HTTPS requests from loopback clients and uses non-Secure, `SameSite=Lax` cookies without the `__Host-` prefix; it can connect to local MongoDB or Atlas. Non-loopback requests still require HTTPS. Behind a TLS-terminating proxy, keep the option false, set `TRUSTED_PROXY_CIDRS`, and forward `X-Forwarded-Proto: https` plus the client chain in `X-Forwarded-For`; untrusted forwarding headers are ignored.
 
 ## Seed a Super Admin account

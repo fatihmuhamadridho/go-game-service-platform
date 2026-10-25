@@ -370,6 +370,21 @@ func TestRequestIPTrustsForwardedChainOnlyFromConfiguredProxy(t *testing.T) {
 	}
 }
 
+func TestVercelForwardedHeadersProvideClientIPAndHTTPS(t *testing.T) {
+	t.Setenv("VERCEL", "1")
+	request := httptest.NewRequest(http.MethodPost, "/", nil)
+	request.RemoteAddr = "127.0.0.1:9000"
+	request.Header.Set("x-vercel-forwarded-for", "198.51.100.27")
+	request.Header.Set("x-forwarded-proto", "https")
+
+	if got := ClientIP(request, nil); got != "198.51.100.27" {
+		t.Fatalf("Vercel client IP = %q, want %q", got, "198.51.100.27")
+	}
+	if !isSecureRequest(request, nil) {
+		t.Fatal("Vercel HTTPS forwarding header was not trusted")
+	}
+}
+
 func TestLoginRejectsUnknownFieldsBeforeCallingService(t *testing.T) {
 	handler, limiter := newHTTPTestHandler()
 	mux := http.NewServeMux()

@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -506,6 +507,11 @@ func decodeStrictJSON(writer http.ResponseWriter, request *http.Request, destina
 }
 
 func requestIP(request *http.Request, trustedProxies []*net.IPNet) string {
+	if os.Getenv("VERCEL") == "1" {
+		if candidate, err := netip.ParseAddr(strings.TrimSpace(strings.Split(request.Header.Get("x-vercel-forwarded-for"), ",")[0])); err == nil {
+			return candidate.String()
+		}
+	}
 	host, _, err := net.SplitHostPort(request.RemoteAddr)
 	if err != nil {
 		host = strings.Trim(request.RemoteAddr, "[]")
@@ -542,6 +548,9 @@ func isTrustedProxy(address net.IP, trustedProxies []*net.IPNet) bool {
 
 func isSecureRequest(request *http.Request, trustedProxies []*net.IPNet) bool {
 	if request.TLS != nil {
+		return true
+	}
+	if os.Getenv("VERCEL") == "1" && strings.EqualFold(strings.TrimSpace(request.Header.Get("X-Forwarded-Proto")), "https") {
 		return true
 	}
 	host, _, err := net.SplitHostPort(request.RemoteAddr)
