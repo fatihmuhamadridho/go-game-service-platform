@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -47,28 +48,28 @@ func New(ctx context.Context, logger *slog.Logger) (*Application, error) {
 	defer stop()
 	if err := adminModel.EnsureIndexes(indexCtx); err != nil {
 		_ = client.Disconnect(context.Background())
-		return nil, errors.New("MongoDB index setup failed")
+		return nil, fmt.Errorf("MongoDB index setup failed: %w", err)
 	}
 	if err := gameModel.EnsureIndexes(indexCtx); err != nil {
 		_ = client.Disconnect(context.Background())
-		return nil, errors.New("MongoDB game index setup failed")
+		return nil, fmt.Errorf("MongoDB game index setup failed: %w", err)
 	}
 	if err := publicGameModel.EnsureIndexes(indexCtx); err != nil {
 		_ = client.Disconnect(context.Background())
-		return nil, errors.New("MongoDB public game index setup failed")
+		return nil, fmt.Errorf("MongoDB public game index setup failed: %w", err)
 	}
 	if err := catalogModel.EnsureIndexes(indexCtx); err != nil {
 		_ = client.Disconnect(context.Background())
-		return nil, errors.New("MongoDB catalog index setup failed")
+		return nil, fmt.Errorf("MongoDB catalog index setup failed: %w", err)
 	}
 	operationModel := operation.NewMongoStore(db)
 	if err := operationModel.EnsureIndexes(indexCtx); err != nil {
 		_ = client.Disconnect(context.Background())
-		return nil, errors.New("MongoDB operation index setup failed")
+		return nil, fmt.Errorf("MongoDB operation index setup failed: %w", err)
 	}
 	if err := operationModel.SeedDefaults(indexCtx, operation.DefaultSettings(), operation.DefaultAboutPage()); err != nil {
 		_ = client.Disconnect(context.Background())
-		return nil, errors.New("MongoDB operation defaults setup failed")
+		return nil, fmt.Errorf("MongoDB operation defaults setup failed: %w", err)
 	}
 
 	tokenManager := auth.TokenManager{Secret: cfg.JWTSecret, Issuer: cfg.JWTIssuer, Audience: cfg.JWTAudience}
