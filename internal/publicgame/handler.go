@@ -1,6 +1,7 @@
 package publicgame
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"math"
@@ -15,13 +16,21 @@ import (
 )
 
 type Handler struct {
-	service        *Service
-	trustedProxies []*net.IPNet
+	service         *Service
+	trustedProxies  []*net.IPNet
+	categoryGameIDs func(context.Context, string) []string
+	gameMetadata    func(context.Context,string)(int64,[]CategorySummary,string)
 }
 
-func NewHandler(service *Service, trustedProxies []*net.IPNet) *Handler {
-	return &Handler{service: service, trustedProxies: trustedProxies}
+func NewHandler(service *Service, trustedProxies []*net.IPNet, categoryGameIDs ...func(context.Context, string) []string) *Handler {
+	h := &Handler{service: service, trustedProxies: trustedProxies}
+	if len(categoryGameIDs) > 0 {
+		h.categoryGameIDs = categoryGameIDs[0]
+	}
+	return h
 }
+
+func (h *Handler) SetGameMetadata(metadata func(context.Context, string) (int64, []CategorySummary, string)) { h.gameMetadata = metadata }
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/games/v1/list", h.list)
@@ -38,11 +47,17 @@ func (h *Handler) list(writer http.ResponseWriter, request *http.Request) {
 		writeError(writer, err)
 		return
 	}
+	category := filter.Category
+	filter.Category = ""
+	if category != "" {
+		if h.categoryGameIDs != nil { filter.GameIDs = h.categoryGameIDs(request.Context(), category) } else { filter.GameIDs = []string{} }
+	}
 	page, err := h.service.List(request.Context(), filter)
 	if err != nil {
 		writeError(writer, err)
 		return
 	}
+	h.enrich(request.Context(), &page)
 	writeList(writer, page, "Games retrieved")
 }
 
@@ -61,6 +76,7 @@ func (h *Handler) popular(writer http.ResponseWriter, request *http.Request) {
 		writeError(writer, err)
 		return
 	}
+	h.enrich(request.Context(), &page)
 	writeList(writer, page, "Popular games retrieved")
 }
 
@@ -70,7 +86,7 @@ func (h *Handler) limit(request *http.Request) error {
 }
 
 func parseListQuery(values url.Values) (Filter, error) {
-	for _, key := range []string{"search", "platform", "sort", "page", "limit"} {
+	for _, key := range []string{"search", "platform", "sort", "page", "limit", "category"} {
 		if len(values[key]) > 1 {
 			return Filter{}, invalidError()
 		}
@@ -88,11 +104,19 @@ func parseListQuery(values url.Values) (Filter, error) {
 	if value, ok := oneValue(values, "sort"); ok {
 		filter.Sort = value
 	}
+	if value, ok := oneValue(values, "category"); ok {
+		filter.Category = strings.TrimSpace(value)
+		if len(filter.Category) > 100 {
+			return Filter{}, invalidError()
+		}
+	}
 	if err := parsePagination(values, &filter.Page, &filter.Limit); err != nil {
 		return Filter{}, err
 	}
 	return filter, nil
 }
+
+func (h *Handler) enrich(ctx context.Context, page *Page) { if h.gameMetadata==nil{return};for i:=range page.Items {count,categories,summary:=h.gameMetadata(ctx,page.Items[i].ID);page.Items[i].ServiceCount=count;page.Items[i].Categories=categories;page.Items[i].ServiceSummary=summary} }
 
 func parsePopularQuery(values url.Values) (Filter, error) {
 	filter := Filter{Page: 1, Limit: 6, Sort: "SORT_ORDER_ASC", Popular: true}

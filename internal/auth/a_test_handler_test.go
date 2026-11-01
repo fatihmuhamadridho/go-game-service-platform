@@ -97,6 +97,71 @@ func TestCORSUsesExactAllowlistAndCredentialedOrigin(t *testing.T) {
 	}
 }
 
+func TestPublicCatalogCORSAllowsCredentialOmittedJSONReads(t *testing.T) {
+	handler, _ := newHTTPTestHandler()
+	for _, path := range []string{
+		"/api/settings/v1/public",
+		"/api/service-categories/v1/list",
+		"/api/games/v1/list",
+	} {
+		t.Run(path, func(t *testing.T) {
+			preflight := httptest.NewRequest(http.MethodOptions, path, nil)
+			preflight.Header.Set("Origin", "http://localhost:3001")
+			preflight.Header.Set("Access-Control-Request-Method", "GET")
+			preflight.Header.Set("Access-Control-Request-Headers", "content-type, x-request-id")
+			preflightResponse := httptest.NewRecorder()
+			handler.CORS(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				t.Fatal("preflight must not reach endpoint")
+			})).ServeHTTP(preflightResponse, preflight)
+			if preflightResponse.Code != http.StatusNoContent || preflightResponse.Header().Get("Access-Control-Allow-Origin") != "*" || preflightResponse.Header().Get("Access-Control-Allow-Credentials") != "" {
+				t.Fatalf("unexpected public preflight response: %d %#v", preflightResponse.Code, preflightResponse.Header())
+			}
+
+			get := httptest.NewRequest(http.MethodGet, path, nil)
+			get.Header.Set("Origin", "http://localhost:3001")
+			getResponse := httptest.NewRecorder()
+			handler.CORS(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) { writer.WriteHeader(http.StatusOK) })).ServeHTTP(getResponse, get)
+			if getResponse.Code != http.StatusOK || getResponse.Header().Get("Access-Control-Allow-Origin") != "*" {
+				t.Fatalf("unexpected public GET response: %d %#v", getResponse.Code, getResponse.Header())
+			}
+		})
+	}
+}
+
+func TestOrderCORSAllowsTrackingAndIdempotencyHeaders(t *testing.T) {
+	handler, _ := newHTTPTestHandler()
+	handler.allowInsecureHTTP = true
+	request := httptest.NewRequest(http.MethodOptions, "/api/orders/v1/checkout", nil)
+	request.Header.Set("Origin", "https://dashboard.example.test")
+	request.Header.Set("Access-Control-Request-Method", "POST")
+	request.Header.Set("Access-Control-Request-Headers", "authorization, content-type, idempotency-key")
+	request.RemoteAddr = "127.0.0.1:5000"
+	response := httptest.NewRecorder()
+	handler.CORS(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("preflight must not reach endpoint") })).ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("expected order preflight 204, got %d: %s", response.Code, response.Body.String())
+	}
+	if got := response.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(strings.ToLower(got), "authorization") || !strings.Contains(strings.ToLower(got), "idempotency-key") {
+		t.Fatalf("order preflight missing request headers: %q", got)
+	}
+}
+
+func TestConfiguredLocalhost3001OrderCORS(t *testing.T) {
+	limiter := &httpTestLimiter{}
+	manager := TokenManager{Secret: []byte("01234567890123456789012345678901"), Issuer: "issuer", Audience: "audience"}
+	handler := NewAdminAuthHandler(&AuthService{Limiter: limiter}, httpTestModel{}, manager, []string{"http://localhost:3001"}, nil, slog.New(slog.NewTextHandler(&strings.Builder{}, nil)), true)
+	request := httptest.NewRequest(http.MethodOptions, "/api/orders/v1/tracking/order-1/payment", nil)
+	request.Header.Set("Origin", "http://localhost:3001")
+	request.Header.Set("Access-Control-Request-Method", "POST")
+	request.Header.Set("Access-Control-Request-Headers", "authorization, content-type")
+	request.RemoteAddr = "127.0.0.1:5000"
+	response := httptest.NewRecorder()
+	handler.CORS(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("preflight must not reach endpoint") })).ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent || response.Header().Get("Access-Control-Allow-Origin") != "http://localhost:3001" || response.Header().Get("Access-Control-Allow-Credentials") != "true" {
+		t.Fatalf("local order CORS mismatch: status=%d headers=%#v body=%s", response.Code, response.Header(), response.Body.String())
+	}
+}
+
 func TestCORSRejectsRequestsWithoutOrigin(t *testing.T) {
 	handler, limiter := newHTTPTestHandler()
 	handler.allowInsecureHTTP = true
@@ -235,13 +300,24 @@ func TestAuthCookiesHaveExactHostCookieSecurityAttributes(t *testing.T) {
 	response := httptest.NewRecorder()
 	setAuthCookies(response, "access", "refresh", 900)
 	cookies := response.Result().Cookies()
-	if len(cookies) != 2 {
-		t.Fatalf("expected 2 cookies, got %d", len(cookies))
+	if len(cookies) != 4 {
+		t.Fatalf("expected 2 current cookies plus 2 legacy-cookie expirations, got %d", len(cookies))
 	}
+	current := map[string]bool{}
+	legacyExpired := map[string]bool{}
 	for _, cookie := range cookies {
 		if !cookie.Secure || !cookie.HttpOnly || cookie.Path != "/" || cookie.SameSite != http.SameSiteNoneMode || cookie.Domain != "" {
 			t.Fatalf("unsafe cookie attributes: %#v", cookie)
 		}
+		if cookie.Name == accessCookieName || cookie.Name == refreshCookieName {
+			current[cookie.Name] = cookie.MaxAge > 0
+		}
+		if cookie.Name == legacyAccessCookieName || cookie.Name == legacyRefreshCookieName {
+			legacyExpired[cookie.Name] = cookie.MaxAge < 0
+		}
+	}
+	if !current[accessCookieName] || !current[refreshCookieName] || !legacyExpired[legacyAccessCookieName] || !legacyExpired[legacyRefreshCookieName] {
+		t.Fatalf("current cookies not issued or legacy cookies not expired: current=%v legacy=%v", current, legacyExpired)
 	}
 	response = httptest.NewRecorder()
 	handler, _ := newHTTPTestHandler()
@@ -257,8 +333,8 @@ func TestLocalHTTPCookiesUseLocalhostCompatibleAttributes(t *testing.T) {
 	response := httptest.NewRecorder()
 	setAuthCookies(response, "access", "refresh", 900, false)
 	cookies := response.Result().Cookies()
-	if len(cookies) != 2 {
-		t.Fatalf("expected 2 cookies, got %d", len(cookies))
+	if len(cookies) != 4 {
+		t.Fatalf("expected 2 current cookies plus 2 legacy-cookie expirations, got %d", len(cookies))
 	}
 	for _, cookie := range cookies {
 		if cookie.Secure || cookie.HttpOnly != true || cookie.Path != "/" || cookie.SameSite != http.SameSiteLaxMode || strings.HasPrefix(cookie.Name, "__Host-") {
@@ -297,15 +373,66 @@ func TestLogoutRevokesFamilyAndClearsCookiesIdempotently(t *testing.T) {
 	if len(data.revoked) != 1 || data.revoked[0] != "family_1" {
 		t.Fatalf("logout did not revoke the active family: %#v", data.revoked)
 	}
-	if cookies := response.Result().Cookies(); len(cookies) != 2 || cookies[0].MaxAge >= 0 || cookies[1].MaxAge >= 0 {
+	if cookies := response.Result().Cookies(); len(cookies) != 4 {
 		t.Fatalf("logout did not clear both cookies: %#v", cookies)
+	} else {
+		for _, cookie := range cookies {
+			if cookie.MaxAge >= 0 {
+				t.Fatalf("logout left cookie active: %#v", cookie)
+			}
+		}
 	}
 
 	request = httptest.NewRequest(http.MethodPost, "/api/admin/auth/v1/logout", nil)
 	response = httptest.NewRecorder()
 	handler.logout(response, request)
-	if response.Code != http.StatusOK || len(response.Result().Cookies()) != 2 || len(data.revoked) != 1 {
+	if response.Code != http.StatusOK || len(response.Result().Cookies()) != 4 || len(data.revoked) != 1 {
 		t.Fatalf("logout without a session was not idempotent: status=%d cookies=%#v revoked=%#v", response.Code, response.Result().Cookies(), data.revoked)
+	}
+}
+
+func TestAuthCookieNamesUseBongastoreAndRecognizeLegacyNames(t *testing.T) {
+	access, refresh := authCookieNames(true)
+	if access != "__Host-bongastore-admin-access" || refresh != "__Host-bongastore-admin-refresh" {
+		t.Fatalf("unexpected secure auth cookie names: %q %q", access, refresh)
+	}
+	legacyAccess, legacyRefresh := legacyAuthCookieNames(true)
+	if legacyAccess != "__Host-jokihub-admin-access" || legacyRefresh != "__Host-jokihub-admin-refresh" {
+		t.Fatalf("unexpected secure legacy cookie names: %q %q", legacyAccess, legacyRefresh)
+	}
+	access, refresh = authCookieNames(false)
+	if access != "bongastore-admin-access" || refresh != "bongastore-admin-refresh" {
+		t.Fatalf("unexpected localhost auth cookie names: %q %q", access, refresh)
+	}
+	legacyAccess, legacyRefresh = legacyAuthCookieNames(false)
+	if legacyAccess != "jokihub-admin-access" || legacyRefresh != "jokihub-admin-refresh" {
+		t.Fatalf("unexpected localhost legacy cookie names: %q %q", legacyAccess, legacyRefresh)
+	}
+}
+
+func TestMiddlewareAcceptsValidLegacyAccessCookieForActiveSession(t *testing.T) {
+	secret := []byte("01234567890123456789012345678901")
+	legacyTokens := TokenManager{Secret: secret, Issuer: "jokihub-admin-api", Audience: "jokihub-admin-dashboard"}
+	access, err := legacyTokens.IssueAccess("admin_1", "family_legacy", time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	model := httpTestModel{active: true, profile: AdminProfile{ID: "admin_1", Username: "admin"}}
+	currentTokens := TokenManager{Secret: secret, Issuer: "bongastore-admin-api", Audience: "bongastore-admin-dashboard"}
+	handler := NewAdminAuthHandler(&AuthService{}, model, currentTokens, nil, nil, nil, true)
+	request := httptest.NewRequest(http.MethodGet, "/api/admin/auth/v1/session?accountType=ADMIN", nil)
+	legacyAccess, _ := legacyAuthCookieNames(false)
+	request.AddCookie(&http.Cookie{Name: legacyAccess, Value: access})
+	response := httptest.NewRecorder()
+	handler.Middleware(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		profile, ok := AdminProfileFromRequest(request)
+		if !ok || profile.ID != "admin_1" {
+			t.Fatalf("legacy cookie did not resolve active profile: %#v %t", profile, ok)
+		}
+		writer.WriteHeader(http.StatusNoContent)
+	})).ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("valid legacy session rejected: status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 
@@ -425,10 +552,16 @@ func TestLoginSuccessSetsCookiesAndReturnsProfileWithCSRFOnly(t *testing.T) {
 		t.Fatalf("login response did not contain only profile and CSRF data: %s", response.Body.String())
 	}
 	cookies := response.Result().Cookies()
-	if len(cookies) != 2 || cookies[0].Value != "access-token" || cookies[1].Value != "xx" {
+	values := map[string]string{}
+	for _, cookie := range cookies {
+		if cookie.MaxAge > 0 {
+			values[cookie.Name] = cookie.Value
+		}
+	}
+	if len(cookies) != 4 || values["bongastore-admin-access"] != "access-token" || values["bongastore-admin-refresh"] != "xx" {
 		t.Fatalf("login cookies missing or malformed: %#v", cookies)
 	}
-	if strings.Contains(response.Body.String(), `"`+cookies[1].Value+`"`) {
+	if strings.Contains(response.Body.String(), `"`+values["bongastore-admin-refresh"]+`"`) {
 		t.Fatalf("refresh token leaked into login response: %s", response.Body.String())
 	}
 }

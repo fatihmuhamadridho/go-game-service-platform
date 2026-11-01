@@ -7,6 +7,7 @@ type LoginRequestDTO struct {
 
 type LoginResponseDTO struct {
 	AdminProfile
+	AccountType   string `json:"accountType"`
 	CSRFToken     string `json:"csrfToken"`
 	AccessExpires int    `json:"accessExpiresIn"`
 }

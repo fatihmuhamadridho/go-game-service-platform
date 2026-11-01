@@ -40,7 +40,7 @@ func newGameTestServer(t *testing.T, profile auth.AdminProfile, data *testGameDa
 	mux := http.NewServeMux()
 	gameHandler.Register(mux)
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		request.AddCookie(&http.Cookie{Name: "__Host-jokihub-admin-access", Value: access})
+		request.AddCookie(&http.Cookie{Name: "__Host-bongastore-admin-access", Value: access})
 		request.Header.Set("X-CSRF-Token", "csrf")
 		request.TLS = &tls.ConnectionState{}
 		mux.ServeHTTP(writer, request)
