@@ -9,8 +9,10 @@ import (
 
 	"github.com/fatihmuhamadridho/go-game-service-platform/internal/adminaccount"
 	"github.com/fatihmuhamadridho/go-game-service-platform/internal/auth"
+	"github.com/fatihmuhamadridho/go-game-service-platform/internal/catalog"
 	"github.com/fatihmuhamadridho/go-game-service-platform/internal/config"
 	"github.com/fatihmuhamadridho/go-game-service-platform/internal/game"
+	"github.com/fatihmuhamadridho/go-game-service-platform/internal/operation"
 	"github.com/fatihmuhamadridho/go-game-service-platform/internal/platform/database"
 	"github.com/fatihmuhamadridho/go-game-service-platform/internal/publicgame"
 	"github.com/fatihmuhamadridho/go-game-service-platform/internal/role"
@@ -37,6 +39,7 @@ func New(ctx context.Context, logger *slog.Logger) (*Application, error) {
 	adminModel := auth.NewMongoAdminAuthRepository(db)
 	gameModel := game.NewMongoGameRepository(db)
 	publicGameModel := publicgame.NewMongoRepository(db)
+	catalogModel := catalog.NewMongoRepository(db)
 	adminAccountModel := adminaccount.NewMongoRepository(db)
 	roleModel := role.NewMongoRepository(db)
 
@@ -54,6 +57,19 @@ func New(ctx context.Context, logger *slog.Logger) (*Application, error) {
 		_ = client.Disconnect(context.Background())
 		return nil, errors.New("MongoDB public game index setup failed")
 	}
+	if err := catalogModel.EnsureIndexes(indexCtx); err != nil {
+		_ = client.Disconnect(context.Background())
+		return nil, errors.New("MongoDB catalog index setup failed")
+	}
+	operationModel := operation.NewMongoStore(db)
+	if err := operationModel.EnsureIndexes(indexCtx); err != nil {
+		_ = client.Disconnect(context.Background())
+		return nil, errors.New("MongoDB operation index setup failed")
+	}
+	if err := operationModel.SeedDefaults(indexCtx, operation.DefaultSettings(), operation.DefaultAboutPage()); err != nil {
+		_ = client.Disconnect(context.Background())
+		return nil, errors.New("MongoDB operation defaults setup failed")
+	}
 
 	tokenManager := auth.TokenManager{Secret: cfg.JWTSecret, Issuer: cfg.JWTIssuer, Audience: cfg.JWTAudience}
 	service := &auth.AuthService{Data: adminModel, Limiter: adminModel, Tokens: tokenManager, Passwords: auth.Argon2id{}}
@@ -63,7 +79,14 @@ func New(ctx context.Context, logger *slog.Logger) (*Application, error) {
 	game.NewAdminGameHandler(&game.GameService{Data: gameModel}, authHandler, cfg.TrustedProxyCIDRs).Register(mux)
 	role.NewAdminRoleHandler(&role.Service{Data: roleModel}, adminModel, authHandler, cfg.TrustedProxyCIDRs).Register(mux)
 	adminaccount.NewAdminAccountHandler(&adminaccount.Service{Data: adminAccountModel}, adminModel, authHandler, cfg.TrustedProxyCIDRs).Register(mux)
-	publicgame.NewHandler(&publicgame.Service{Data: publicGameModel}, cfg.TrustedProxyCIDRs).Register(mux)
+	catalogHandler := catalog.NewHandler(catalogModel, publicGameModel)
+	catalogHandler.Register(mux, authHandler.Middleware)
+	operationService := operation.NewService(operationModel, publicGameModel, catalogModel)
+	operationHandler := operation.NewHandler(operationService)
+	operationHandler.Register(mux, authHandler.Middleware)
+	publicHandler := publicgame.NewHandler(&publicgame.Service{Data: publicGameModel}, cfg.TrustedProxyCIDRs, catalogHandler.GameIDsInCategory)
+	publicHandler.SetGameMetadata(catalogHandler.GameMetadata)
+	publicHandler.Register(mux)
 
 	return &Application{
 		Handler: authHandler.CORS(auth.RequestLogging(logger, mux)),

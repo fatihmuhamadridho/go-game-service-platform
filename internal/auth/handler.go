@@ -18,9 +18,11 @@ import (
 )
 
 const (
-	accessCookieName  = "__Host-jokihub-admin-access"
-	refreshCookieName = "__Host-jokihub-admin-refresh"
-	csrfHeader        = "X-CSRF-Token"
+	accessCookieName        = "__Host-bongastore-admin-access"
+	refreshCookieName       = "__Host-bongastore-admin-refresh"
+	legacyAccessCookieName  = "__Host-jokihub-admin-access"
+	legacyRefreshCookieName = "__Host-jokihub-admin-refresh"
+	csrfHeader              = "X-CSRF-Token"
 )
 
 type authModelData interface {
@@ -54,22 +56,50 @@ func NewAdminAuthHandler(service *AuthService, data authModelData, tokens TokenM
 
 func (h *AdminAuthHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/admin/auth/v1/login", h.login)
+	mux.HandleFunc("GET /api/auth/v1/session", h.sessionRouter)
 	mux.HandleFunc("POST /api/admin/auth/v1/refresh-token", h.refresh)
 	mux.HandleFunc("POST /api/admin/auth/v1/logout", h.logout)
+}
+
+func (h *AdminAuthHandler) sessionRouter(writer http.ResponseWriter, request *http.Request) {
+	if request.URL.Query().Get("accountType") != "ADMIN" {
+		writeServiceError(writer, serviceErr("ADMB01003", http.StatusUnauthorized, nil))
+		return
+	}
+	h.Middleware(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		profile, ok := AdminProfileFromRequest(request)
+		if !ok {
+			writeServiceError(writer, serviceErr("ADMB01003", http.StatusUnauthorized, nil))
+			return
+		}
+		utils.WriteJSON(writer, http.StatusOK, utils.ResponseEnvelope{Code: "ADMS00000", Message: "Sesi admin aktif.", Data: map[string]any{
+			"id": profile.ID, "username": profile.Username, "name": profile.Name, "email": profile.Email, "role": profile.Role.Name, "accountType": "ADMIN",
+		}})
+	})).ServeHTTP(writer, request)
 }
 
 func (h *AdminAuthHandler) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Cache-Control", "no-store")
 		accessName, _ := authCookieNames(!h.allowInsecureHTTP)
+		legacyAccessName, _ := legacyAuthCookieNames(!h.allowInsecureHTTP)
 		cookie, err := request.Cookie(accessName)
 		if err != nil {
-			h.writeRequestError(writer, request, serviceErr("ADMB01003", 401, nil))
-			return
+			cookie, err = request.Cookie(legacyAccessName)
+			if err != nil {
+				h.writeRequestError(writer, request, serviceErr("ADMB01003", 401, nil))
+				return
+			}
 		}
 		claims, err := h.tokens.ParseAccess(cookie.Value, time.Now().UTC())
+		if cookie.Name == legacyAccessName && err != nil {
+			legacyTokens := TokenManager{Secret: h.tokens.Secret, Issuer: "jokihub-admin-api", Audience: "jokihub-admin-dashboard"}
+			claims, err = legacyTokens.ParseAccess(cookie.Value, time.Now().UTC())
+		}
 		if err != nil {
-			h.clearAuthCookies(writer)
+			if cookie.Name != legacyAccessName {
+				h.clearAuthCookies(writer)
+			}
 			h.writeRequestError(writer, request, serviceErr("ADMB01003", 401, nil))
 			return
 		}
@@ -84,7 +114,7 @@ func (h *AdminAuthHandler) Middleware(next http.Handler) http.Handler {
 			return
 		}
 		requireCSRF := request.Method != http.MethodGet && request.Method != http.MethodHead && request.Method != http.MethodOptions
-		requireCSRF = requireCSRF || isGameRequest(request) || isRoleRequest(request) || isAdminUserRequest(request)
+		requireCSRF = requireCSRF || isGameRequest(request) || isRoleRequest(request) || isAdminUserRequest(request) || isOtherAdminRequest(request)
 		if requireCSRF && request.Method != http.MethodOptions {
 			valid, err := h.data.ValidateCSRF(request.Context(), claims.FamilyID, utils.DigestToken(request.Header.Get(csrfHeader)))
 			if err != nil {
@@ -143,12 +173,16 @@ func isAdminUserRequest(request *http.Request) bool {
 	return strings.HasPrefix(request.URL.Path, "/api/admin/admin-users/v1/")
 }
 
+func isOtherAdminRequest(request *http.Request) bool {
+	return strings.HasPrefix(request.URL.Path, "/api/admin/") && !isGameRequest(request) && !isRoleRequest(request) && !isAdminUserRequest(request) && !strings.HasPrefix(request.URL.Path, "/api/admin/auth/")
+}
+
 func isPublicCatalogRequest(request *http.Request) bool {
 	switch request.URL.Path {
-	case "/api/games/v1/list", "/api/games/v1/popular":
+	case "/api/games/v1/list", "/api/games/v1/popular", "/api/service-categories/v1/list", "/api/settings/v1/public":
 		return true
 	default:
-		return false
+		return strings.HasPrefix(request.URL.Path, "/api/games/v1/") && strings.HasSuffix(request.URL.Path, "/services") || strings.HasPrefix(request.URL.Path, "/api/pages/v1/")
 	}
 }
 
@@ -264,7 +298,7 @@ func (h *AdminAuthHandler) login(writer http.ResponseWriter, request *http.Reque
 		return
 	}
 	setAuthCookies(writer, issued.AccessToken, issued.RefreshToken, issued.AccessExpires, !h.allowInsecureHTTP)
-	utils.WriteJSON(writer, http.StatusOK, utils.ResponseEnvelope{Code: "ADMS00000", Message: "Login admin berhasil.", Data: LoginResponseDTO{AdminProfile: issued.Profile, CSRFToken: issued.CSRFToken, AccessExpires: issued.AccessExpires}})
+	utils.WriteJSON(writer, http.StatusOK, utils.ResponseEnvelope{Code: "ADMS00000", Message: "Login admin berhasil.", Data: LoginResponseDTO{AdminProfile: issued.Profile, AccountType: "ADMIN", CSRFToken: issued.CSRFToken, AccessExpires: issued.AccessExpires}})
 }
 
 func (h *AdminAuthHandler) refresh(writer http.ResponseWriter, request *http.Request) {
@@ -275,7 +309,11 @@ func (h *AdminAuthHandler) refresh(writer http.ResponseWriter, request *http.Req
 		return
 	}
 	_, refreshName := authCookieNames(!h.allowInsecureHTTP)
+	_, legacyRefreshName := legacyAuthCookieNames(!h.allowInsecureHTTP)
 	refreshCookie, err := request.Cookie(refreshName)
+	if err != nil {
+		refreshCookie, err = request.Cookie(legacyRefreshName)
+	}
 	if err != nil {
 		h.clearAuthCookies(writer)
 		writeServiceError(writer, serviceErr("ADMB01003", 401, nil))
@@ -303,8 +341,13 @@ func (h *AdminAuthHandler) logout(writer http.ResponseWriter, request *http.Requ
 	}
 	var familyID string
 	accessName, refreshName := authCookieNames(!h.allowInsecureHTTP)
-	if cookie, err := request.Cookie(accessName); err == nil {
-		if claims, parseErr := h.tokens.ParseAccess(cookie.Value, time.Now().UTC()); parseErr == nil {
+	legacyAccessName, legacyRefreshName := legacyAuthCookieNames(!h.allowInsecureHTTP)
+	accessCookie, accessErr := request.Cookie(accessName)
+	if accessErr != nil {
+		accessCookie, accessErr = request.Cookie(legacyAccessName)
+	}
+	if accessErr == nil {
+		if claims, parseErr := h.tokens.ParseAccess(accessCookie.Value, time.Now().UTC()); parseErr == nil {
 			_, active, resolveErr := h.data.ResolveAccess(request.Context(), claims.FamilyID, claims.Subject, time.Now().UTC())
 			if resolveErr != nil {
 				writeServiceError(writer, serviceErr("ADMT03001", 500, resolveErr))
@@ -316,7 +359,11 @@ func (h *AdminAuthHandler) logout(writer http.ResponseWriter, request *http.Requ
 		}
 	}
 	if familyID == "" {
-		if cookie, err := request.Cookie(refreshName); err == nil {
+		cookie, err := request.Cookie(refreshName)
+		if err != nil {
+			cookie, err = request.Cookie(legacyRefreshName)
+		}
+		if err == nil {
 			session, findErr := h.data.FindSessionByRefreshDigest(request.Context(), utils.DigestToken(cookie.Value))
 			if findErr != nil && !errors.Is(findErr, ErrNotFound) {
 				writeServiceError(writer, serviceErr("ADMT03001", 500, findErr))
@@ -379,12 +426,12 @@ func (h *AdminAuthHandler) CORS(next http.Handler) http.Handler {
 		if request.Method == http.MethodOptions {
 			requestedMethod := strings.ToUpper(strings.TrimSpace(request.Header.Get("Access-Control-Request-Method")))
 			methods := corsMethods(request)
-			if !containsString(methods, requestedMethod) || !allowedPreflightHeaders(request.Header.Get("Access-Control-Request-Headers")) {
+			if !containsString(methods, requestedMethod) || !allowedPreflightHeadersForRequest(request, request.Header.Get("Access-Control-Request-Headers")) {
 				h.writeRequestError(writer, request, serviceErr("ADMB01002", 403, nil))
 				return
 			}
 			writer.Header().Set("Access-Control-Allow-Methods", strings.Join(append(methods, "OPTIONS"), ", "))
-			writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token, X-Request-Id")
+			writer.Header().Set("Access-Control-Allow-Headers", corsAllowedHeaders(request))
 			writer.Header().Set("Access-Control-Max-Age", "600")
 			writer.WriteHeader(http.StatusNoContent)
 			return
@@ -410,6 +457,9 @@ func (h *AdminAuthHandler) CORS(next http.Handler) http.Handler {
 
 func (h *AdminAuthHandler) publicCatalogCORS(writer http.ResponseWriter, request *http.Request, next http.Handler) {
 	writer.Header().Set("Access-Control-Allow-Origin", "*")
+	// Public catalog/settings reads do not use cookies. Keep wildcard CORS so
+	// browsers can call them with credentials omitted, while allowing the JSON
+	// content type used by the shared FE fetch wrapper during preflight.
 	if request.Method == http.MethodOptions {
 		requestedMethod := strings.ToUpper(strings.TrimSpace(request.Header.Get("Access-Control-Request-Method")))
 		if (requestedMethod != "" && requestedMethod != http.MethodGet) || !allowedPublicPreflightHeaders(request.Header.Get("Access-Control-Request-Headers")) {
@@ -417,7 +467,7 @@ func (h *AdminAuthHandler) publicCatalogCORS(writer http.ResponseWriter, request
 			return
 		}
 		writer.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-		writer.Header().Set("Access-Control-Allow-Headers", "X-Request-Id")
+		writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Request-Id")
 		writer.Header().Set("Access-Control-Max-Age", "600")
 		writer.WriteHeader(http.StatusNoContent)
 		return
@@ -430,7 +480,7 @@ func (h *AdminAuthHandler) publicCatalogCORS(writer http.ResponseWriter, request
 }
 
 func allowedPublicPreflightHeaders(value string) bool {
-	allowed := map[string]bool{"x-request-id": true}
+	allowed := map[string]bool{"content-type": true, "x-request-id": true}
 	for _, header := range strings.Split(value, ",") {
 		header = strings.ToLower(strings.TrimSpace(header))
 		if header != "" && !allowed[header] {
@@ -445,13 +495,22 @@ func corsMethods(request *http.Request) []string {
 		return []string{http.MethodGet}
 	}
 	if isAdminUserRequest(request) {
-		return []string{http.MethodGet}
+		return []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodPut, http.MethodDelete}
 	}
 	if isRoleRequest(request) {
 		return []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete}
 	}
 	if isGameRequest(request) {
 		return []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete}
+	}
+	if strings.HasPrefix(request.URL.Path, "/api/auth/") {
+		return []string{http.MethodGet, http.MethodPost}
+	}
+	if strings.HasPrefix(request.URL.Path, "/api/admin/") {
+		return []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodPut, http.MethodDelete}
+	}
+	if strings.HasPrefix(request.URL.Path, "/api/orders/v1/") {
+		return []string{http.MethodGet, http.MethodPost}
 	}
 	return []string{http.MethodPost}
 }
@@ -474,6 +533,27 @@ func allowedPreflightHeaders(value string) bool {
 		}
 	}
 	return true
+}
+
+func allowedPreflightHeadersForRequest(request *http.Request, value string) bool {
+	if !strings.HasPrefix(request.URL.Path, "/api/orders/v1/") {
+		return allowedPreflightHeaders(value)
+	}
+	allowed := map[string]bool{"content-type": true, "x-csrf-token": true, "x-request-id": true, "authorization": true, "idempotency-key": true}
+	for _, header := range strings.Split(value, ",") {
+		header = strings.ToLower(strings.TrimSpace(header))
+		if header != "" && !allowed[header] {
+			return false
+		}
+	}
+	return true
+}
+
+func corsAllowedHeaders(request *http.Request) string {
+	if strings.HasPrefix(request.URL.Path, "/api/orders/v1/") {
+		return "Content-Type, X-CSRF-Token, X-Request-Id, Authorization, Idempotency-Key"
+	}
+	return "Content-Type, X-CSRF-Token, X-Request-Id"
 }
 
 func requireJSON(writer http.ResponseWriter, request *http.Request, required bool) bool {
@@ -575,6 +655,7 @@ func setAuthCookies(writer http.ResponseWriter, accessToken, refreshToken string
 	accessName, refreshName := authCookieNames(isSecure)
 	http.SetCookie(writer, authCookie(accessName, accessToken, accessExpires, isSecure))
 	http.SetCookie(writer, authCookie(refreshName, refreshToken, int(RefreshLifetime.Seconds()), isSecure))
+	expireLegacyAuthCookies(writer, isSecure)
 }
 
 func (h *AdminAuthHandler) clearAuthCookies(writer http.ResponseWriter) {
@@ -586,6 +667,16 @@ func (h *AdminAuthHandler) clearAuthCookies(writer http.ResponseWriter) {
 	refresh.MaxAge = -1
 	http.SetCookie(writer, access)
 	http.SetCookie(writer, refresh)
+	expireLegacyAuthCookies(writer, secure)
+}
+
+func expireLegacyAuthCookies(writer http.ResponseWriter, secure bool) {
+	legacyAccess, legacyRefresh := legacyAuthCookieNames(secure)
+	for _, name := range []string{legacyAccess, legacyRefresh} {
+		cookie := authCookie(name, "", 0, secure)
+		cookie.MaxAge = -1
+		http.SetCookie(writer, cookie)
+	}
 }
 
 func authCookie(name, value string, maxAge int, secure ...bool) *http.Cookie {
@@ -596,6 +687,13 @@ func authCookie(name, value string, maxAge int, secure ...bool) *http.Cookie {
 func authCookieNames(secure bool) (string, string) {
 	if secure {
 		return accessCookieName, refreshCookieName
+	}
+	return "bongastore-admin-access", "bongastore-admin-refresh"
+}
+
+func legacyAuthCookieNames(secure bool) (string, string) {
+	if secure {
+		return legacyAccessCookieName, legacyRefreshCookieName
 	}
 	return "jokihub-admin-access", "jokihub-admin-refresh"
 }

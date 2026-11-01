@@ -38,7 +38,7 @@ Add these environment variables in Vercel Project Settings for each environment 
 - `MONGODB_DATABASE`: database name if the URI does not include one.
 - `JWT_SECRET`: a unique random secret of at least 32 bytes.
 - `CORS_ALLOWED_ORIGINS`: exact browser dashboard origins, comma-separated, such as `https://admin.example.com,https://admin-git-preview-example.vercel.app`. Add the production and preview dashboard origins to their matching Vercel environments.
-- `JWT_ISSUER` and `JWT_AUDIENCE`: optional; defaults are `jokihub-admin-api` and `jokihub-admin-dashboard`.
+- `JWT_ISSUER` and `JWT_AUDIENCE`: optional; defaults are `bongastore-admin-api` and `bongastore-admin-dashboard`.
 - `AUTH_ALLOW_INSECURE_HTTP`: set to `false` in Vercel.
 - `TRUSTED_PROXY_CIDRS`: leave blank for direct Vercel hosting. The API recognizes Vercel's platform-provided client-IP and HTTPS forwarding headers when `VERCEL=1` is present.
 

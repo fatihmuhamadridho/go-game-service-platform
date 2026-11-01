@@ -25,12 +25,17 @@ func TestLoadAllowsLocalHTTPOnlyForLocalMongo(t *testing.T) {
 	t.Setenv("JWT_SECRET", "01234567890123456789012345678901")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000")
 	t.Setenv("AUTH_ALLOW_INSECURE_HTTP", "true")
+	t.Setenv("JWT_ISSUER", "")
+	t.Setenv("JWT_AUDIENCE", "")
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("local config rejected: %v", err)
 	}
 	if !cfg.AllowInsecureHTTP || len(cfg.Origins) != 1 || cfg.Origins[0] != "http://localhost:3000" {
 		t.Fatalf("unexpected local config: %#v", cfg)
+	}
+	if cfg.JWTIssuer != "bongastore-admin-api" || cfg.JWTAudience != "bongastore-admin-dashboard" {
+		t.Fatalf("unexpected JWT brand defaults: issuer=%q audience=%q", cfg.JWTIssuer, cfg.JWTAudience)
 	}
 }
 

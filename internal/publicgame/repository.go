@@ -47,6 +47,9 @@ func (r *MongoRepository) List(ctx context.Context, filter Filter) (Page, error)
 	if filter.Popular {
 		query = append(query, bson.E{Key: "is_popular", Value: true})
 	}
+	if filter.GameIDs != nil {
+		query = append(query,bson.E{Key:"game_id",Value:bson.D{{Key:"$in",Value:filter.GameIDs}}})
+	}
 	if filter.Platform != "" {
 		query = append(query, bson.E{Key: "platform", Value: filter.Platform})
 	}

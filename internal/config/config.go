@@ -43,8 +43,8 @@ func Load() (Config, error) {
 	if len(secret) < 32 {
 		return Config{}, errors.New("JWT_SECRET must contain at least 32 characters")
 	}
-	issuer := envOr("JWT_ISSUER", "jokihub-admin-api")
-	audience := envOr("JWT_AUDIENCE", "jokihub-admin-dashboard")
+	issuer := envOr("JWT_ISSUER", "bongastore-admin-api")
+	audience := envOr("JWT_AUDIENCE", "bongastore-admin-dashboard")
 	origins := splitOrigins(os.Getenv("CORS_ALLOWED_ORIGINS"))
 	if len(origins) == 0 {
 		return Config{}, errors.New("CORS_ALLOWED_ORIGINS must list exact dashboard origins")

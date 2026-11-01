@@ -9,12 +9,19 @@ type Game struct {
 	Platform    *string `json:"platform,omitempty" bson:"platform"`
 	IsPopular   *bool   `json:"isPopular,omitempty" bson:"is_popular,omitempty"`
 	SortOrder   int64   `json:"sortOrder" bson:"sort_order"`
+	ServiceCount int64 `json:"serviceCount" bson:"-"`
+	Categories []CategorySummary `json:"categories" bson:"-"`
+	ServiceSummary string `json:"serviceSummary,omitempty" bson:"-"`
 }
+
+type CategorySummary struct { ID string `json:"id"`; Name string `json:"name"`; Slug string `json:"slug"` }
 
 type Filter struct {
 	Search   string
 	Platform string
 	Sort     string
+	Category string
+	GameIDs []string
 	Page     int64
 	Limit    int64
 	Popular  bool
